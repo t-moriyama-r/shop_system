@@ -1,0 +1,11 @@
+{
+  "name": "kojin-pos",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "dev:front": "pnpm --filter front dev",
+    "dev:backend": "pnpm --filter backend dev"
+  }
+}
