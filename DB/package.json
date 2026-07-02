@@ -1,13 +1,14 @@
 {
-  "name": "backend",
+  "name": "db",
   "version": "1.0.0",
   "description": "",
-  "main": "index.ts",
-  "types": "index.ts",
+  "main": "client.ts",
+  "types": "client.ts",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "dev": "tsx watch index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "generate": "drizzle-kit generate",
+    "migrate": "tsx migrate.ts",
+    "seed": "tsx seed.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,12 +16,14 @@
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "dependencies": {
-    "@hono/node-server": "^1.13.7",
-    "db": "workspace:*",
-    "hono": "^4.12.27"
+    "drizzle-orm": "^0.44.6",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pg": "^8.15.6",
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.31.6",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

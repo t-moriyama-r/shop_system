@@ -6,6 +6,11 @@
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "dev:front": "pnpm --filter front dev",
-    "dev:backend": "pnpm --filter backend dev"
+    "dev:backend": "pnpm --filter backend dev",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter db generate",
+    "db:migrate": "pnpm --filter db migrate",
+    "db:seed": "pnpm --filter db seed"
   }
 }
