@@ -1,4 +1,7 @@
+import { notFound } from 'next/navigation'
 import { OrderMenu } from './order-menu'
+
+const TABLE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/
 
 export default async function OrderPage({
   params,
@@ -6,6 +9,10 @@ export default async function OrderPage({
   params: Promise<{ tableId: string }>
 }) {
   const { tableId } = await params
+
+  if (!TABLE_ID_PATTERN.test(tableId)) {
+    notFound()
+  }
 
   return (
     <main>
