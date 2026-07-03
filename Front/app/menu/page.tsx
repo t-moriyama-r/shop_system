@@ -1,5 +1,6 @@
 import { cacheLife, cacheTag } from 'next/cache'
 import { apiClient } from '@/lib/api'
+import { MenuItemList } from '@/components/menu-item-list'
 
 async function getMenu() {
   'use cache'
@@ -19,13 +20,7 @@ export default async function MenuPage() {
   return (
     <main>
       <h1>メニュー</h1>
-      <ul>
-        {menu.map((item) => (
-          <li key={item.id}>
-            {item.name} - ¥{item.price}
-          </li>
-        ))}
-      </ul>
+      <MenuItemList items={menu} />
     </main>
   )
 }

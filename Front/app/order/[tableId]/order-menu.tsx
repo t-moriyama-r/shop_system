@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api'
-
-type MenuItem = { id: string; name: string; price: number }
+import { MenuItemList } from '@/components/menu-item-list'
+import type { MenuItem } from '@/lib/types'
 
 export function OrderMenu() {
   const [menu, setMenu] = useState<MenuItem[]>([])
@@ -30,13 +30,5 @@ export function OrderMenu() {
     return <p role="alert">{error}</p>
   }
 
-  return (
-    <ul>
-      {menu.map((item) => (
-        <li key={item.id}>
-          {item.name} - ¥{item.price}
-        </li>
-      ))}
-    </ul>
-  )
+  return <MenuItemList items={menu} />
 }
