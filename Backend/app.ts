@@ -1,9 +1,11 @@
 import { db, menuItems } from 'db'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
 
 const app = new Hono()
 
+app.use('/*', secureHeaders())
 app.use('/*', cors({ origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000' }))
 
 const routes = app
