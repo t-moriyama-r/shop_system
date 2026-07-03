@@ -11,6 +11,7 @@
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter db generate",
     "db:migrate": "pnpm --filter db migrate",
-    "db:seed": "pnpm --filter db seed"
+    "db:seed": "pnpm --filter db seed",
+    "test": "pnpm -r test"
   }
 }

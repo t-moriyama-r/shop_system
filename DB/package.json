@@ -8,7 +8,8 @@
     "preinstall": "npx only-allow pnpm",
     "generate": "drizzle-kit generate",
     "migrate": "tsx migrate.ts",
-    "seed": "tsx seed.ts"
+    "seed": "tsx seed.ts",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -25,6 +26,7 @@
     "dotenv": "^17.2.3",
     "drizzle-kit": "^0.31.6",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
   }
 }
