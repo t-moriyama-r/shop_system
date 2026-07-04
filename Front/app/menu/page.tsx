@@ -8,6 +8,9 @@ async function getMenu() {
   cacheTag('menu')
 
   const res = await apiClient.api.menu.$get()
+  if (!res.ok) {
+    throw new Error(`Failed to fetch menu: ${res.status} ${res.statusText}`)
+  }
   return res.json()
 }
 
