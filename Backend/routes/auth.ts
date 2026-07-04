@@ -85,7 +85,7 @@ auth.post('/login', async (c) => {
     setCookie(c, 'sessionId', sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Strict',
+      sameSite: 'Lax',
       path: '/',
       maxAge: 30 * 60,
     })
@@ -157,7 +157,7 @@ auth.post('/login', async (c) => {
   setCookie(c, 'sessionId', sessionId, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Strict',
+    sameSite: 'Lax',
     path: '/',
     maxAge: 30 * 60,
   })
@@ -191,7 +191,7 @@ auth.post('/logout', authMiddleware, async (c) => {
   setCookie(c, 'sessionId', '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Strict',
+    sameSite: 'Lax',
     path: '/',
     maxAge: 0,
   })
@@ -245,6 +245,27 @@ auth.post('/password', authMiddleware, async (c) => {
     .update(seAdminUsers)
     .set({ password: hashedPassword, updatedAt: new Date() })
     .where(eq(seAdminUsers.seAdminUserId, user.seAdminUserId))
+
+  // パスワード設定に伴い既存セッションを全て破棄し、セッションを再発行する。
+  // パスワード未設定時はメールアドレスのみでセッションが作れるため、設定完了時点で
+  // 古いセッション（他者が作成した可能性のあるものを含む）を無効化する。
+  await db.delete(sessions).where(eq(sessions.seAdminUserId, user.seAdminUserId))
+
+  const sessionId = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+  await db.insert(sessions).values({
+    sessionId,
+    seAdminUserId: user.seAdminUserId,
+    expiresAt,
+  })
+
+  setCookie(c, 'sessionId', sessionId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: 30 * 60,
+  })
 
   const ipAddress = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null
   const userAgent = c.req.header('user-agent') ?? null
