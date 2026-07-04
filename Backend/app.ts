@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
 import { auth } from './routes/auth'
+import { seAdminUsersRoute } from './routes/se-admin-users'
 
 const app = new Hono()
 
@@ -36,6 +37,7 @@ const routes = app
     }
   })
   .route('/api/auth', auth)
+  .route('/api/se-admin-users', seAdminUsersRoute)
 
 export type AppType = typeof routes
 
