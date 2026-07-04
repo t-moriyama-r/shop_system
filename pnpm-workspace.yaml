@@ -4,6 +4,7 @@ packages:
   - "DB"
 
 allowBuilds:
+  bcrypt: true
   esbuild: true
   sharp: false
   unrs-resolver: false

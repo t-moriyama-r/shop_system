@@ -16,10 +16,13 @@
   "packageManager": "pnpm@11.9.0",
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "bcrypt": "^6.0.0",
     "db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/node": "^22",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

@@ -3,11 +3,18 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
+import { auth } from './routes/auth'
 
 const app = new Hono()
 
 app.use('/*', secureHeaders())
-app.use('/*', cors({ origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000' }))
+app.use(
+  '/*',
+  cors({
+    origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:3000',
+    credentials: true,
+  }),
+)
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
@@ -28,6 +35,7 @@ const routes = app
       throw new HTTPException(500, { message: 'Failed to fetch menu items' })
     }
   })
+  .route('/api/auth', auth)
 
 export type AppType = typeof routes
 
