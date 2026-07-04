@@ -2,6 +2,7 @@ packages:
   - "Front"
   - "Backend"
   - "DB"
+  - "e2e"
 
 allowBuilds:
   bcrypt: true
