@@ -1,0 +1,17 @@
+{
+  "name": "e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "login": "tsx login.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "playwright-core": "1.55.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
