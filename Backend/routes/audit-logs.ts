@@ -1,7 +1,5 @@
 import { Hono } from 'hono'
-import { db } from 'db'
-import { auditLogs } from 'db/schema'
-import { and, asc, count, desc, eq, gte, lte, type SQL } from 'drizzle-orm'
+import { listAuditLogs } from 'db/audit-logs'
 import { authMiddleware, type AuthUser } from '../middleware/auth'
 
 const auditLogsRoute = new Hono<{ Variables: { user: AuthUser } }>()
@@ -24,69 +22,50 @@ function parsePositiveInt(value: string | undefined, fallback: number, max?: num
 
 // GET /api/audit-logs
 // 監査ログ参照API。改ざん防止のため参照（GET）のみを提供する。
+// route は入力のパース・バリデーション・整形に専念し、クエリは db/audit-logs に委譲する。
 auditLogsRoute.get('/', async (c) => {
   const page = parsePositiveInt(c.req.query('page'), DEFAULT_PAGE)
   const limit = parsePositiveInt(c.req.query('limit'), DEFAULT_LIMIT, MAX_LIMIT)
 
-  const actionType = c.req.query('actionType')?.trim()
-  const result = c.req.query('result')?.trim()
   const seAdminUserId = c.req.query('seAdminUserId')?.trim()
-  const targetType = c.req.query('targetType')?.trim()
   const targetId = c.req.query('targetId')?.trim()
-  const dateFrom = c.req.query('dateFrom')?.trim()
-  const dateTo = c.req.query('dateTo')?.trim()
+  const dateFromRaw = c.req.query('dateFrom')?.trim()
+  const dateToRaw = c.req.query('dateTo')?.trim()
 
-  const conditions: SQL[] = []
+  if (seAdminUserId && !UUID_PATTERN.test(seAdminUserId)) {
+    return c.json({ error: 'seAdminUserId はUUID形式で指定してください' }, 400)
+  }
+  if (targetId && !UUID_PATTERN.test(targetId)) {
+    return c.json({ error: 'targetId はUUID形式で指定してください' }, 400)
+  }
 
-  if (actionType) {
-    conditions.push(eq(auditLogs.actionType, actionType))
-  }
-  if (result) {
-    conditions.push(eq(auditLogs.result, result))
-  }
-  if (targetType) {
-    conditions.push(eq(auditLogs.targetType, targetType))
-  }
-  if (seAdminUserId) {
-    if (!UUID_PATTERN.test(seAdminUserId)) {
-      return c.json({ error: 'seAdminUserId はUUID形式で指定してください' }, 400)
-    }
-    conditions.push(eq(auditLogs.seAdminUserId, seAdminUserId))
-  }
-  if (targetId) {
-    if (!UUID_PATTERN.test(targetId)) {
-      return c.json({ error: 'targetId はUUID形式で指定してください' }, 400)
-    }
-    conditions.push(eq(auditLogs.targetId, targetId))
-  }
-  if (dateFrom) {
-    const from = new Date(dateFrom)
-    if (Number.isNaN(from.getTime())) {
+  let dateFrom: Date | undefined
+  if (dateFromRaw) {
+    dateFrom = new Date(dateFromRaw)
+    if (Number.isNaN(dateFrom.getTime())) {
       return c.json({ error: 'dateFrom は日時形式で指定してください' }, 400)
     }
-    conditions.push(gte(auditLogs.createdAt, from))
   }
-  if (dateTo) {
-    const to = new Date(dateTo)
-    if (Number.isNaN(to.getTime())) {
+  let dateTo: Date | undefined
+  if (dateToRaw) {
+    dateTo = new Date(dateToRaw)
+    if (Number.isNaN(dateTo.getTime())) {
       return c.json({ error: 'dateTo は日時形式で指定してください' }, 400)
     }
-    conditions.push(lte(auditLogs.createdAt, to))
   }
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-  // ソートは createdAt 固定。sort=createdAt:asc で昇順、その他は降順（デフォルト）。
-  const orderBy = c.req.query('sort') === 'createdAt:asc' ? asc(auditLogs.createdAt) : desc(auditLogs.createdAt)
-
-  const rows = await db
-    .select()
-    .from(auditLogs)
-    .where(whereClause)
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset((page - 1) * limit)
-
-  const [{ value: total }] = await db.select({ value: count() }).from(auditLogs).where(whereClause)
+  const { rows, total } = await listAuditLogs({
+    actionType: c.req.query('actionType')?.trim() || undefined,
+    result: c.req.query('result')?.trim() || undefined,
+    targetType: c.req.query('targetType')?.trim() || undefined,
+    seAdminUserId: seAdminUserId || undefined,
+    targetId: targetId || undefined,
+    dateFrom,
+    dateTo,
+    sort: c.req.query('sort'),
+    page,
+    limit,
+  })
 
   return c.json({
     data: rows,

@@ -1,19 +1,16 @@
-import { Hono } from 'hono'
-import { db } from 'db'
-import { seAdminUsers, sessions } from 'db/schema'
-import { and, eq, ilike, asc, desc, count, type SQL } from 'drizzle-orm'
+import { Hono, type Context } from 'hono'
+import {
+  findActiveSeAdminById,
+  listSeAdminUsers,
+  setSeAdminLock,
+  softDeleteSeAdminUser,
+} from 'db/se-admin'
 import { authMiddleware, type AuthUser } from '../middleware/auth'
 import { recordAuditLog } from '../lib/audit-log'
 
 const seAdminUsersRoute = new Hono<{ Variables: { user: AuthUser } }>()
 
 seAdminUsersRoute.use('*', authMiddleware)
-
-const SORTABLE_COLUMNS = {
-  createdAt: seAdminUsers.createdAt,
-  email: seAdminUsers.email,
-  lastLoginAt: seAdminUsers.lastLoginAt,
-} as const
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -27,13 +24,11 @@ function parsePositiveInt(value: string | undefined, fallback: number, max?: num
   return max ? Math.min(parsed, max) : parsed
 }
 
-function parseSort(value: string | undefined) {
-  const [rawColumn, rawDirection] = (value ?? '').split(':')
-  const column = rawColumn in SORTABLE_COLUMNS
-    ? SORTABLE_COLUMNS[rawColumn as keyof typeof SORTABLE_COLUMNS]
-    : SORTABLE_COLUMNS.createdAt
-  const direction = rawDirection === 'asc' ? asc : desc
-  return direction(column)
+function clientMeta(c: Context) {
+  return {
+    ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null,
+    userAgent: c.req.header('user-agent') ?? null,
+  }
 }
 
 // GET /api/se-admin-users
@@ -43,37 +38,14 @@ seAdminUsersRoute.get('/', async (c) => {
   const keyword = c.req.query('keyword')?.trim()
   const isLockedParam = c.req.query('isLocked')
 
-  const conditions: SQL[] = [eq(seAdminUsers.isDeleted, false)]
-  if (keyword) {
-    conditions.push(ilike(seAdminUsers.email, `%${keyword}%`))
-  }
-  if (isLockedParam === 'true' || isLockedParam === 'false') {
-    conditions.push(eq(seAdminUsers.isLocked, isLockedParam === 'true'))
-  }
-
-  const whereClause = and(...conditions)
-  const orderBy = parseSort(c.req.query('sort'))
-
-  const rows = await db
-    .select({
-      seAdminUserId: seAdminUsers.seAdminUserId,
-      email: seAdminUsers.email,
-      isLocked: seAdminUsers.isLocked,
-      failedLoginCount: seAdminUsers.failedLoginCount,
-      lastLoginAt: seAdminUsers.lastLoginAt,
-      createdAt: seAdminUsers.createdAt,
-      updatedAt: seAdminUsers.updatedAt,
-    })
-    .from(seAdminUsers)
-    .where(whereClause)
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset((page - 1) * limit)
-
-  const [{ value: total }] = await db
-    .select({ value: count() })
-    .from(seAdminUsers)
-    .where(whereClause)
+  const { rows, total } = await listSeAdminUsers({
+    keyword: keyword || undefined,
+    isLocked:
+      isLockedParam === 'true' ? true : isLockedParam === 'false' ? false : undefined,
+    sort: c.req.query('sort'),
+    page,
+    limit,
+  })
 
   return c.json({
     data: rows,
@@ -95,23 +67,12 @@ seAdminUsersRoute.delete('/:seAdminUserId', async (c) => {
     return c.json({ error: '自分自身のアカウントは削除できません' }, 403)
   }
 
-  const [target] = await db
-    .select()
-    .from(seAdminUsers)
-    .where(and(eq(seAdminUsers.seAdminUserId, seAdminUserId), eq(seAdminUsers.isDeleted, false)))
-
+  const target = await findActiveSeAdminById(seAdminUserId)
   if (!target) {
     return c.json({ error: '対象のSE管理者アカウントが見つかりません' }, 404)
   }
 
-  const now = new Date()
-  await db
-    .update(seAdminUsers)
-    .set({ isDeleted: true, deletedAt: now, updatedAt: now })
-    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
-
-  // 該当ユーザーの既存セッションを無効化
-  await db.delete(sessions).where(eq(sessions.seAdminUserId, seAdminUserId))
+  await softDeleteSeAdminUser(seAdminUserId)
 
   await recordAuditLog({
     operatorType: 'se_admin',
@@ -121,8 +82,7 @@ seAdminUsersRoute.delete('/:seAdminUserId', async (c) => {
     targetId: seAdminUserId,
     result: 'SUCCESS',
     detail: `SE管理者アカウント(${target.email})を論理削除`,
-    ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null,
-    userAgent: c.req.header('user-agent') ?? null,
+    ...clientMeta(c),
   })
 
   return c.json({ message: 'SE管理者アカウントを削除しました' })
@@ -139,25 +99,12 @@ seAdminUsersRoute.patch('/:seAdminUserId/lock', async (c) => {
   }
   const { isLocked } = body
 
-  const [target] = await db
-    .select()
-    .from(seAdminUsers)
-    .where(and(eq(seAdminUsers.seAdminUserId, seAdminUserId), eq(seAdminUsers.isDeleted, false)))
-
+  const target = await findActiveSeAdminById(seAdminUserId)
   if (!target) {
     return c.json({ error: '対象のSE管理者アカウントが見つかりません' }, 404)
   }
 
-  const now = new Date()
-  await db
-    .update(seAdminUsers)
-    .set({
-      isLocked,
-      // ロック解除時は連続失敗カウントもリセットする
-      ...(isLocked ? {} : { failedLoginCount: 0 }),
-      updatedAt: now,
-    })
-    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
+  await setSeAdminLock(seAdminUserId, isLocked)
 
   await recordAuditLog({
     operatorType: 'se_admin',
@@ -169,8 +116,7 @@ seAdminUsersRoute.patch('/:seAdminUserId/lock', async (c) => {
     detail: isLocked
       ? `SE管理者アカウント(${target.email})を手動ロック`
       : `SE管理者アカウント(${target.email})のロックを解除`,
-    ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null,
-    userAgent: c.req.header('user-agent') ?? null,
+    ...clientMeta(c),
   })
 
   return c.json({

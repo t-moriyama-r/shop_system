@@ -6,7 +6,10 @@
   "types": "client.ts",
   "exports": {
     ".": "./client.ts",
-    "./schema": "./schema.ts"
+    "./schema": "./schema.ts",
+    "./se-admin": "./se-admin.ts",
+    "./sessions": "./sessions.ts",
+    "./audit-logs": "./audit-logs.ts"
   },
   "scripts": {
     "preinstall": "npx only-allow pnpm",

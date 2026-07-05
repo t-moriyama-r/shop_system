@@ -1,6 +1,5 @@
-import { db } from 'db'
-import { sessions, seAdminUsers } from 'db/schema'
-import { eq, and, gt } from 'drizzle-orm'
+import { findActiveSeAdminById } from 'db/se-admin'
+import { extendSession, findValidSession } from 'db/sessions'
 import { createMiddleware } from 'hono/factory'
 import { getCookie } from 'hono/cookie'
 
@@ -18,32 +17,18 @@ export const authMiddleware = createMiddleware<{ Variables: { user: AuthUser } }
     }
 
     const now = new Date()
-    const [session] = await db
-      .select()
-      .from(sessions)
-      .where(and(eq(sessions.sessionId, sessionId), gt(sessions.expiresAt, now)))
-
+    const session = await findValidSession(sessionId, now)
     if (!session) {
       return c.json({ error: 'Unauthorized' }, 401)
     }
 
-    const [user] = await db
-      .select()
-      .from(seAdminUsers)
-      .where(
-        and(
-          eq(seAdminUsers.seAdminUserId, session.seAdminUserId),
-          eq(seAdminUsers.isDeleted, false),
-        ),
-      )
-
+    const user = await findActiveSeAdminById(session.seAdminUserId)
     if (!user) {
       return c.json({ error: 'Unauthorized' }, 401)
     }
 
     // スライディングウィンドウ: セッション有効期限を延長
-    const newExpiry = new Date(now.getTime() + 30 * 60 * 1000)
-    await db.update(sessions).set({ expiresAt: newExpiry }).where(eq(sessions.sessionId, sessionId))
+    await extendSession(sessionId, new Date(now.getTime() + 30 * 60 * 1000))
 
     c.set('user', {
       seAdminUserId: user.seAdminUserId,

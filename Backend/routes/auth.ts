@@ -1,7 +1,11 @@
-import { Hono } from 'hono'
-import { db } from 'db'
-import { seAdminUsers, sessions } from 'db/schema'
-import { eq, and } from 'drizzle-orm'
+import { Hono, type Context } from 'hono'
+import {
+  applyFailedLoginAttempt,
+  findActiveSeAdminByEmail,
+  recordSuccessfulLogin,
+  setSeAdminPassword,
+} from 'db/se-admin'
+import { createSession, deleteSession, deleteSessionsForUser } from 'db/sessions'
 import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
 import { getCookie, setCookie } from 'hono/cookie'
@@ -9,6 +13,31 @@ import { authMiddleware, type AuthUser } from '../middleware/auth'
 import { recordAuditLog } from '../lib/audit-log'
 
 const auth = new Hono<{ Variables: { user: AuthUser } }>()
+
+const SESSION_TTL_MS = 30 * 60 * 1000
+const MAX_FAILED_LOGIN = 5
+
+function clientMeta(c: Context) {
+  return {
+    ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null,
+    userAgent: c.req.header('user-agent') ?? null,
+  }
+}
+
+// セッションを発行し、Cookie に設定する。セッションIDの採番は route の責務。
+async function issueSession(c: Context, seAdminUserId: string): Promise<void> {
+  const sessionId = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
+  await createSession(sessionId, seAdminUserId, expiresAt)
+
+  setCookie(c, 'sessionId', sessionId, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: SESSION_TTL_MS / 1000,
+  })
+}
 
 // POST /api/auth/login
 auth.post('/login', async (c) => {
@@ -19,13 +48,9 @@ auth.post('/login', async (c) => {
     return c.json({ error: 'メールアドレスとパスワードは必須です' }, 400)
   }
 
-  const ipAddress = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null
-  const userAgent = c.req.header('user-agent') ?? null
+  const meta = clientMeta(c)
 
-  const [user] = await db
-    .select()
-    .from(seAdminUsers)
-    .where(and(eq(seAdminUsers.email, email), eq(seAdminUsers.isDeleted, false)))
+  const user = await findActiveSeAdminByEmail(email)
 
   if (!user) {
     await recordAuditLog({
@@ -33,8 +58,7 @@ auth.post('/login', async (c) => {
       actionType: 'LOGIN_FAILURE',
       result: 'FAILURE',
       detail: 'ユーザーが見つかりません',
-      ipAddress,
-      userAgent,
+      ...meta,
     })
     return c.json({ error: 'メールアドレスまたはパスワードが正しくありません' }, 401)
   }
@@ -49,27 +73,15 @@ auth.post('/login', async (c) => {
       targetId: user.seAdminUserId,
       result: 'FAILURE',
       detail: 'アカウントがロックされています',
-      ipAddress,
-      userAgent,
+      ...meta,
     })
     return c.json({ error: 'アカウントがロックされています。管理者に連絡してください。' }, 403)
   }
 
   // パスワード未設定の場合 - メールアドレスのみで認証しPW設定画面へ
   if (user.password === null) {
-    const sessionId = crypto.randomBytes(32).toString('hex')
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-
-    await db.insert(sessions).values({
-      sessionId,
-      seAdminUserId: user.seAdminUserId,
-      expiresAt,
-    })
-
-    await db
-      .update(seAdminUsers)
-      .set({ lastLoginAt: new Date(), failedLoginCount: 0, updatedAt: new Date() })
-      .where(eq(seAdminUsers.seAdminUserId, user.seAdminUserId))
+    await issueSession(c, user.seAdminUserId)
+    await recordSuccessfulLogin(user.seAdminUserId)
 
     await recordAuditLog({
       operatorType: 'se_admin',
@@ -79,16 +91,7 @@ auth.post('/login', async (c) => {
       targetId: user.seAdminUserId,
       result: 'SUCCESS',
       detail: 'パスワード未設定 - PW設定画面へ遷移',
-      ipAddress,
-      userAgent,
-    })
-
-    setCookie(c, 'sessionId', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Lax',
-      path: '/',
-      maxAge: 30 * 60,
+      ...meta,
     })
 
     return c.json({ redirectTo: '/password/setup', isPasswordSet: false })
@@ -98,16 +101,9 @@ auth.post('/login', async (c) => {
   const isValid = await bcrypt.compare(password, user.password)
   if (!isValid) {
     const newCount = user.failedLoginCount + 1
-    const isLocked = newCount >= 5
+    const isLocked = newCount >= MAX_FAILED_LOGIN
 
-    await db
-      .update(seAdminUsers)
-      .set({
-        failedLoginCount: newCount,
-        isLocked,
-        updatedAt: new Date(),
-      })
-      .where(eq(seAdminUsers.seAdminUserId, user.seAdminUserId))
+    await applyFailedLoginAttempt(user.seAdminUserId, newCount, isLocked)
 
     await recordAuditLog({
       operatorType: 'se_admin',
@@ -119,8 +115,7 @@ auth.post('/login', async (c) => {
       detail: isLocked
         ? `連続ログイン失敗${newCount}回 - アカウントロック`
         : `連続ログイン失敗${newCount}回`,
-      ipAddress,
-      userAgent,
+      ...meta,
     })
 
     if (isLocked) {
@@ -130,19 +125,8 @@ auth.post('/login', async (c) => {
   }
 
   // 認証成功
-  const sessionId = crypto.randomBytes(32).toString('hex')
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-
-  await db.insert(sessions).values({
-    sessionId,
-    seAdminUserId: user.seAdminUserId,
-    expiresAt,
-  })
-
-  await db
-    .update(seAdminUsers)
-    .set({ lastLoginAt: new Date(), failedLoginCount: 0, updatedAt: new Date() })
-    .where(eq(seAdminUsers.seAdminUserId, user.seAdminUserId))
+  await issueSession(c, user.seAdminUserId)
+  await recordSuccessfulLogin(user.seAdminUserId)
 
   await recordAuditLog({
     operatorType: 'se_admin',
@@ -151,16 +135,7 @@ auth.post('/login', async (c) => {
     targetType: 'se_admin_user',
     targetId: user.seAdminUserId,
     result: 'SUCCESS',
-    ipAddress,
-    userAgent,
-  })
-
-  setCookie(c, 'sessionId', sessionId, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: 30 * 60,
+    ...meta,
   })
 
   return c.json({ redirectTo: '/dashboard', isPasswordSet: true })
@@ -171,12 +146,10 @@ auth.post('/logout', authMiddleware, async (c) => {
   const sessionId = getCookie(c, 'sessionId')
 
   if (sessionId) {
-    await db.delete(sessions).where(eq(sessions.sessionId, sessionId))
+    await deleteSession(sessionId)
   }
 
   const user = c.get('user')
-  const ipAddress = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null
-  const userAgent = c.req.header('user-agent') ?? null
 
   await recordAuditLog({
     operatorType: 'se_admin',
@@ -185,8 +158,7 @@ auth.post('/logout', authMiddleware, async (c) => {
     targetType: 'se_admin_user',
     targetId: user.seAdminUserId,
     result: 'SUCCESS',
-    ipAddress,
-    userAgent,
+    ...clientMeta(c),
   })
 
   setCookie(c, 'sessionId', '', {
@@ -241,35 +213,13 @@ auth.post('/password', authMiddleware, async (c) => {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10)
-
-  await db
-    .update(seAdminUsers)
-    .set({ password: hashedPassword, updatedAt: new Date() })
-    .where(eq(seAdminUsers.seAdminUserId, user.seAdminUserId))
+  await setSeAdminPassword(user.seAdminUserId, hashedPassword)
 
   // パスワード設定に伴い既存セッションを全て破棄し、セッションを再発行する。
   // パスワード未設定時はメールアドレスのみでセッションが作れるため、設定完了時点で
   // 古いセッション（他者が作成した可能性のあるものを含む）を無効化する。
-  await db.delete(sessions).where(eq(sessions.seAdminUserId, user.seAdminUserId))
-
-  const sessionId = crypto.randomBytes(32).toString('hex')
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
-  await db.insert(sessions).values({
-    sessionId,
-    seAdminUserId: user.seAdminUserId,
-    expiresAt,
-  })
-
-  setCookie(c, 'sessionId', sessionId, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: 30 * 60,
-  })
-
-  const ipAddress = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? null
-  const userAgent = c.req.header('user-agent') ?? null
+  await deleteSessionsForUser(user.seAdminUserId)
+  await issueSession(c, user.seAdminUserId)
 
   await recordAuditLog({
     operatorType: 'se_admin',
@@ -278,8 +228,7 @@ auth.post('/password', authMiddleware, async (c) => {
     targetType: 'se_admin_user',
     targetId: user.seAdminUserId,
     result: 'SUCCESS',
-    ipAddress,
-    userAgent,
+    ...clientMeta(c),
   })
 
   return c.json({ message: 'パスワードを設定しました', redirectTo: '/dashboard' })

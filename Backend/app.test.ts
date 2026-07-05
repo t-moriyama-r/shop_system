@@ -25,7 +25,13 @@ vi.mock('db/schema', () => ({
     isDeleted: 'is_deleted',
   },
   sessions: { sessionId: 'session_id', seAdminUserId: 'se_admin_user_id' },
+  auditLogs: {},
 }))
+
+// 認証系ルート/ミドルウェアが実 DB クライアントを読み込まないようスタブする。
+vi.mock('db/se-admin', () => ({}))
+vi.mock('db/sessions', () => ({}))
+vi.mock('db/audit-logs', () => ({}))
 
 const { app } = await import('./app')
 
