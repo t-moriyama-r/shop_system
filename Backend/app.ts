@@ -1,4 +1,5 @@
-import { db, menuItems } from 'db'
+import { db } from 'db'
+import { menuItems } from 'db/schema'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'

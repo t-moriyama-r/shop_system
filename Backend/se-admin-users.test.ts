@@ -21,6 +21,9 @@ vi.mock('db', () => ({
     delete: () => h.makeChain(() => undefined),
     insert: () => h.makeChain(() => undefined),
   },
+}))
+
+vi.mock('db/schema', () => ({
   seAdminUsers: {
     seAdminUserId: 'se_admin_user_id',
     email: 'email',

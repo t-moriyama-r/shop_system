@@ -1,4 +1,5 @@
-import { db, sessions, seAdminUsers } from 'db'
+import { db } from 'db'
+import { sessions, seAdminUsers } from 'db/schema'
 import { eq, and, gt } from 'drizzle-orm'
 import { createMiddleware } from 'hono/factory'
 import { getCookie } from 'hono/cookie'

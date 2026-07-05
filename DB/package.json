@@ -4,12 +4,17 @@
   "description": "",
   "main": "client.ts",
   "types": "client.ts",
+  "exports": {
+    ".": "./client.ts",
+    "./schema": "./schema.ts"
+  },
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "generate": "drizzle-kit generate",
     "migrate": "tsx migrate.ts",
     "seed": "tsx seed.ts",
     "cleanup-sessions": "tsx cleanup-sessions.ts",
+    "create-se-admin": "tsx create-se-admin.ts",
     "test": "vitest run"
   },
   "keywords": [],

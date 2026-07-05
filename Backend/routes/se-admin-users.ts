@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { db, seAdminUsers, sessions } from 'db'
+import { db } from 'db'
+import { seAdminUsers, sessions } from 'db/schema'
 import { and, eq, ilike, asc, desc, count, type SQL } from 'drizzle-orm'
 import { authMiddleware, type AuthUser } from '../middleware/auth'
 import { recordAuditLog } from '../lib/audit-log'
