@@ -13,6 +13,7 @@
     "db:migrate": "pnpm --filter db migrate",
     "db:seed": "pnpm --filter db seed",
     "db:cleanup-sessions": "pnpm --filter db cleanup-sessions",
+    "db:create-se-admin": "pnpm --filter db create-se-admin",
     "test": "pnpm -r test"
   }
 }

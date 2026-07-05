@@ -10,6 +10,7 @@
     "migrate": "tsx migrate.ts",
     "seed": "tsx seed.ts",
     "cleanup-sessions": "tsx cleanup-sessions.ts",
+    "create-se-admin": "tsx create-se-admin.ts",
     "test": "vitest run"
   },
   "keywords": [],
