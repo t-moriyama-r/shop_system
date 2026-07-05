@@ -75,6 +75,7 @@ pnpm dev:front
 | `pnpm db:generate` | `DB/schema.ts` の変更からマイグレーション SQL を生成(`DB/migrations/` に追加) |
 | `pnpm db:migrate` | 未適用のマイグレーションを DB に反映 |
 | `pnpm db:seed` | 初期データを投入(`DB/seed.ts`) |
+| `pnpm db:cleanup-sessions` | 期限切れセッションを削除(運用手順は [`documents/運用/セッションクリーンアップ.md`](documents/運用/セッションクリーンアップ.md)) |
 | `pnpm dev:backend` | Backend を起動(ホットリロードあり) |
 | `pnpm dev:front` | Front を起動(ホットリロードあり) |
 

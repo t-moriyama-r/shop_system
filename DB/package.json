@@ -9,6 +9,7 @@
     "generate": "drizzle-kit generate",
     "migrate": "tsx migrate.ts",
     "seed": "tsx seed.ts",
+    "cleanup-sessions": "tsx cleanup-sessions.ts",
     "test": "vitest run"
   },
   "keywords": [],
