@@ -11,6 +11,17 @@ vi.mock('db', () => ({
     },
   },
   menuItems: Symbol('menuItems'),
+  seAdminUsers: {
+    seAdminUserId: 'se_admin_user_id',
+    email: 'email',
+    isLocked: 'is_locked',
+    failedLoginCount: 'failed_login_count',
+    lastLoginAt: 'last_login_at',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+    isDeleted: 'is_deleted',
+  },
+  sessions: { sessionId: 'session_id', seAdminUserId: 'se_admin_user_id' },
 }))
 
 const { app } = await import('./app')
