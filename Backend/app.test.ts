@@ -10,6 +10,9 @@ vi.mock('db', () => ({
       return { from: mockFrom }
     },
   },
+}))
+
+vi.mock('db/schema', () => ({
   menuItems: Symbol('menuItems'),
   seAdminUsers: {
     seAdminUserId: 'se_admin_user_id',

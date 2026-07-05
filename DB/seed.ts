@@ -1,6 +1,7 @@
 import './load-env'
 
-import { db, menuItems, seAdminUsers } from './client'
+import { db } from './client'
+import { menuItems, seAdminUsers } from './schema'
 
 try {
   await db.insert(menuItems).values([

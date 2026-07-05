@@ -1,4 +1,5 @@
-import { db, auditLogs } from 'db'
+import { db } from 'db'
+import { auditLogs } from 'db/schema'
 
 interface AuditLogParams {
   operatorType: 'se_admin' | 'cli' | 'system'

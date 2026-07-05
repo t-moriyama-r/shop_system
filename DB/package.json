@@ -4,6 +4,10 @@
   "description": "",
   "main": "client.ts",
   "types": "client.ts",
+  "exports": {
+    ".": "./client.ts",
+    "./schema": "./schema.ts"
+  },
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "generate": "drizzle-kit generate",

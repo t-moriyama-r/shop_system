@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { db, seAdminUsers, sessions } from 'db'
+import { db } from 'db'
+import { seAdminUsers, sessions } from 'db/schema'
 import { eq, and } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
