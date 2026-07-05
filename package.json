@@ -14,6 +14,7 @@
     "db:seed": "pnpm --filter db seed",
     "db:cleanup-sessions": "pnpm --filter db cleanup-sessions",
     "db:create-se-admin": "pnpm --filter db create-se-admin",
+    "db:delete-se-admin": "pnpm --filter db delete-se-admin",
     "test": "pnpm -r test"
   }
 }
