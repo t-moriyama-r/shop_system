@@ -6,6 +6,7 @@ import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
 import { auth } from './routes/auth'
 import { seAdminUsersRoute } from './routes/se-admin-users'
+import { auditLogsRoute } from './routes/audit-logs'
 
 const app = new Hono()
 
@@ -39,6 +40,7 @@ const routes = app
   })
   .route('/api/auth', auth)
   .route('/api/se-admin-users', seAdminUsersRoute)
+  .route('/api/audit-logs', auditLogsRoute)
 
 export type AppType = typeof routes
 
