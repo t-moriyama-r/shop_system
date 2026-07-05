@@ -75,19 +75,9 @@ pnpm dev:front
 | `pnpm db:generate` | `DB/schema.ts` の変更からマイグレーション SQL を生成(`DB/migrations/` に追加) |
 | `pnpm db:migrate` | 未適用のマイグレーションを DB に反映 |
 | `pnpm db:seed` | 初期データを投入(`DB/seed.ts`) |
-| `pnpm db:cleanup-sessions` | 期限切れセッションを削除(`DB/cleanup-sessions.ts`) |
+| `pnpm db:cleanup-sessions` | 期限切れセッションを削除(運用手順は [`documents/運用/セッションクリーンアップ.md`](documents/運用/セッションクリーンアップ.md)) |
 | `pnpm dev:backend` | Backend を起動(ホットリロードあり) |
 | `pnpm dev:front` | Front を起動(ホットリロードあり) |
-
-### 期限切れセッションのクリーンアップ
-
-`sessions` テーブルは認証時に期限切れレコードを認証対象から除外するのみで、レコード自体は削除されない(ログアウト時のみ明示的に削除)。放置するとテーブルが肥大化するため、`pnpm db:cleanup-sessions` で期限切れセッションを削除する。削除件数が標準出力に表示される。
-
-本番運用では cron 等で定期実行する(例: 15 分ごと)。
-
-```sh
-*/15 * * * * cd /path/to/shop_system && pnpm db:cleanup-sessions >> /var/log/shop_system/session-cleanup.log 2>&1
-```
 
 ### トラブルシューティング
 
