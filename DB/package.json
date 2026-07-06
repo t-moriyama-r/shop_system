@@ -19,6 +19,7 @@
     "migrate": "tsx migrate.ts",
     "seed": "tsx seed.ts",
     "cleanup-sessions": "tsx cleanup-sessions.ts",
+    "cleanup-audit-logs": "tsx cleanup-audit-logs.ts",
     "create-se-admin": "tsx create-se-admin.ts",
     "delete-se-admin": "tsx delete-se-admin.ts",
     "test": "vitest run"
