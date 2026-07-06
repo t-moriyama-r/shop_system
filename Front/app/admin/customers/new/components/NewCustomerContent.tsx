@@ -7,8 +7,9 @@ import {
   type CreateShopAccountInput,
   type ShopAccount,
 } from '@/lib/repositories/shop-accounts'
-import { CustomerAccountForm, type CustomerFormValues } from './CustomerAccountForm'
+import { CustomerAccountForm } from './CustomerAccountForm'
 import { IssueCompletePanel } from './IssueCompletePanel'
+import type { CustomerFormValues } from '../customerFormSchema'
 
 export function NewCustomerContent() {
   const [created, setCreated] = useState<ShopAccount | null>(null)

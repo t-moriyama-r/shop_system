@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { customerFormSchema } from './CustomerAccountForm'
+import { customerFormSchema } from './customerFormSchema'
 
 function errorFor(input: unknown, field: string): string | undefined {
   const result = customerFormSchema.safeParse(input)
