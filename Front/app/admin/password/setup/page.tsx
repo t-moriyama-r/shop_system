@@ -2,9 +2,8 @@
 
 import { useState, useEffect, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { API_BASE_URL as API_BASE } from '@/lib/config'
 import { AdminHeader } from '../../components/admin-header'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
 
 export default function PasswordSetupPage() {
   const router = useRouter()
