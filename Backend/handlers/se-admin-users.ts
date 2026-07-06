@@ -5,20 +5,13 @@ import {
   softDeleteSeAdminUser,
 } from 'db/se-admin'
 import { recordAuditLog } from '../lib/audit-log'
+import { buildPagination, parsePositiveInt } from '../lib/pagination'
 import type { AuthUser } from '../middleware/auth'
 import type { ClientMeta, HandlerResult } from './types'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 100
-
-function parsePositiveInt(value: string | undefined, fallback: number, max?: number): number {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback
-  }
-  return max ? Math.min(parsed, max) : parsed
-}
 
 export interface ListSeAdminUsersInput {
   page?: string
@@ -48,12 +41,7 @@ export async function listSeAdminUsersHandler(
     status: 200,
     body: {
       data: rows,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: buildPagination(page, limit, total),
     },
   }
 }
