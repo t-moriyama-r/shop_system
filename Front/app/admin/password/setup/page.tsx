@@ -4,6 +4,8 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { API_BASE_URL as API_BASE } from '@/lib/config'
 import { AdminHeader } from '../../components/AdminHeader'
+import { ErrorMessage } from '../../components/ErrorMessage'
+import { LoadingIndicator } from '../../components/LoadingIndicator'
 
 export default function PasswordSetupPage() {
   const router = useRouter()
@@ -85,7 +87,7 @@ export default function PasswordSetupPage() {
   if (checkingSession) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="text-gray-500">読み込み中...</div>
+        <LoadingIndicator />
       </div>
     )
   }
@@ -104,8 +106,8 @@ export default function PasswordSetupPage() {
             </p>
 
             {error && (
-              <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                {error}
+              <div className="mb-4">
+                <ErrorMessage message={error} />
               </div>
             )}
 

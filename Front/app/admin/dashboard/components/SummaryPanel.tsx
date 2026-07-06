@@ -1,6 +1,7 @@
 'use client'
 
 import type { DashboardSummary } from '@/lib/repositories/dashboard'
+import { LoadingIndicator } from '../../components/LoadingIndicator'
 import { SummaryCard } from './SummaryCard'
 
 type Props = {
@@ -20,7 +21,7 @@ export function SummaryPanel({ summary, loading, error }: Props) {
 
 function SummaryBody({ summary, loading, error }: Props) {
   if (error) return <p className="text-sm text-red-600">{error}</p>
-  if (loading || !summary) return <p className="text-sm text-gray-400">読み込み中...</p>
+  if (loading || !summary) return <LoadingIndicator />
   return (
     <>
       <SummaryCards summary={summary} />

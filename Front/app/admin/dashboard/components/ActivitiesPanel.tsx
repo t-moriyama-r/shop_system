@@ -1,6 +1,7 @@
 'use client'
 
 import type { ActivityNotification, ShopAccountActivity } from '@/lib/repositories/dashboard'
+import { LoadingIndicator } from '../../components/LoadingIndicator'
 
 type Props = {
   activities: ShopAccountActivity[]
@@ -53,7 +54,7 @@ type ActivitiesTableBodyProps = {
 }
 
 function ActivitiesTableBody({ activities, loading }: ActivitiesTableBodyProps) {
-  if (loading) return <EmptyRow message="読み込み中..." />
+  if (loading) return <EmptyRow message={<LoadingIndicator />} />
   if (activities.length === 0) return <EmptyRow message="まだ顧客アカウントは発行されていません" />
   return (
     <>
@@ -85,7 +86,7 @@ function ActivityRow({ activity }: ActivityRowProps) {
 }
 
 type EmptyRowProps = {
-  message: string
+  message: React.ReactNode
 }
 
 function EmptyRow({ message }: EmptyRowProps) {

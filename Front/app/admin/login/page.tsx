@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { API_BASE_URL as API_BASE } from '@/lib/config'
 import { AdminHeader } from '../components/AdminHeader'
+import { ErrorMessage } from '../components/ErrorMessage'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -74,8 +75,8 @@ export default function LoginPage() {
             </h2>
 
             {error && (
-              <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                {error}
+              <div className="mb-4">
+                <ErrorMessage message={error} />
               </div>
             )}
 
