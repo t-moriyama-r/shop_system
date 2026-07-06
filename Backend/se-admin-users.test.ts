@@ -44,7 +44,7 @@ beforeEach(() => {
 })
 
 describe('GET /api/se-admin-users', () => {
-  it('returns list with pagination metadata', async () => {
+  it('ページネーション情報付きで一覧を返す', async () => {
     const rows = [
       { seAdminUserId: 'u1', email: 'a@example.com', isLocked: false, failedLoginCount: 0, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() },
       { seAdminUserId: 'u2', email: 'b@example.com', isLocked: true, failedLoginCount: 5, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() },
@@ -59,7 +59,7 @@ describe('GET /api/se-admin-users', () => {
     expect(listSeAdminUsers).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 20 }))
   })
 
-  it('parses the isLocked filter into a boolean', async () => {
+  it('isLockedフィルタを真偽値にパースする', async () => {
     listSeAdminUsers.mockResolvedValue({ rows: [], total: 0 })
     await app.request('/api/se-admin-users?isLocked=true')
     expect(listSeAdminUsers).toHaveBeenCalledWith(expect.objectContaining({ isLocked: true }))
@@ -67,21 +67,21 @@ describe('GET /api/se-admin-users', () => {
 })
 
 describe('DELETE /api/se-admin-users/:id', () => {
-  it('rejects deleting own account with 403', async () => {
+  it('自分自身のアカウント削除は403で拒否する', async () => {
     const res = await app.request('/api/se-admin-users/operator-1', { method: 'DELETE' })
     expect(res.status).toBe(403)
     expect(findActiveSeAdminById).not.toHaveBeenCalled()
     expect(recordAuditLog).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when target does not exist', async () => {
+  it('対象が存在しない場合は404を返す', async () => {
     findActiveSeAdminById.mockResolvedValue(undefined)
     const res = await app.request('/api/se-admin-users/missing-id', { method: 'DELETE' })
     expect(res.status).toBe(404)
     expect(softDeleteSeAdminUser).not.toHaveBeenCalled()
   })
 
-  it('logically deletes target and records audit log', async () => {
+  it('対象を論理削除し、監査ログを記録する', async () => {
     findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com' })
     const res = await app.request('/api/se-admin-users/u2', { method: 'DELETE' })
     expect(res.status).toBe(200)
@@ -93,7 +93,7 @@ describe('DELETE /api/se-admin-users/:id', () => {
 })
 
 describe('PATCH /api/se-admin-users/:id/lock', () => {
-  it('returns 400 when isLocked is missing', async () => {
+  it('isLockedが未指定の場合は400を返す', async () => {
     const res = await app.request('/api/se-admin-users/u2/lock', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -103,7 +103,7 @@ describe('PATCH /api/se-admin-users/:id/lock', () => {
     expect(findActiveSeAdminById).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when target does not exist', async () => {
+  it('対象が存在しない場合は404を返す', async () => {
     findActiveSeAdminById.mockResolvedValue(undefined)
     const res = await app.request('/api/se-admin-users/missing/lock', {
       method: 'PATCH',
@@ -113,7 +113,7 @@ describe('PATCH /api/se-admin-users/:id/lock', () => {
     expect(res.status).toBe(404)
   })
 
-  it('unlocks account and records ACCOUNT_UNLOCK', async () => {
+  it('アカウントのロックを解除し、ACCOUNT_UNLOCKを記録する', async () => {
     findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com', isLocked: true })
     const res = await app.request('/api/se-admin-users/u2/lock', {
       method: 'PATCH',

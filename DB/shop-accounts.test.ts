@@ -75,7 +75,7 @@ beforeEach(() => {
 })
 
 describe('SHOP_ACCOUNT_STATUSES / isShopAccountStatus', () => {
-  it('accepts known statuses and rejects unknown ones', () => {
+  it('既知のステータスを受け入れ、未知のステータスを拒否する', () => {
     expect(SHOP_ACCOUNT_STATUSES).toEqual(['active', 'pending', 'suspended'])
     expect(isShopAccountStatus('active')).toBe(true)
     expect(isShopAccountStatus('deleted')).toBe(false)
@@ -83,7 +83,7 @@ describe('SHOP_ACCOUNT_STATUSES / isShopAccountStatus', () => {
 })
 
 describe('listShopAccounts', () => {
-  it('returns rows and total from two queries', async () => {
+  it('2つのクエリから行データと合計件数を返す', async () => {
     const rows = [{ shopAccountId: 's1', shopName: 'Shop', email: 'a@example.com' }]
     h.state.selectQueue = [rows, [{ value: 7 }]]
     const result = await listShopAccounts({ page: 1, limit: 20 })
@@ -93,31 +93,31 @@ describe('listShopAccounts', () => {
 })
 
 describe('findShopAccountById', () => {
-  it('returns the first matching row', async () => {
+  it('最初にマッチした行を返す', async () => {
     h.state.selectQueue = [[{ shopAccountId: 's1', email: 'a@example.com' }]]
     expect(await findShopAccountById('s1')).toMatchObject({ shopAccountId: 's1' })
   })
 
-  it('returns undefined when nothing matches', async () => {
+  it('マッチするものがない場合はundefinedを返す', async () => {
     h.state.selectQueue = [[]]
     expect(await findShopAccountById('missing')).toBeUndefined()
   })
 })
 
 describe('findShopAccountByEmail', () => {
-  it('returns the matching row (including logically deleted)', async () => {
+  it('マッチする行を返す（論理削除済みも含む）', async () => {
     h.state.selectQueue = [[{ shopAccountId: 's1' }]]
     expect(await findShopAccountByEmail('a@example.com')).toMatchObject({ shopAccountId: 's1' })
   })
 
-  it('returns undefined when the email is not registered', async () => {
+  it('メールアドレスが未登録の場合はundefinedを返す', async () => {
     h.state.selectQueue = [[]]
     expect(await findShopAccountByEmail('none@example.com')).toBeUndefined()
   })
 })
 
 describe('createShopAccount', () => {
-  it('inserts the account and a PENDING email log in one transaction', async () => {
+  it('1つのトランザクションでアカウントとPENDINGのメールログを挿入する', async () => {
     h.state.returningQueue = [
       [{ shopAccountId: 's1', email: 'a@example.com' }],
       [{ emailNotificationLogId: 'log-1' }],
@@ -157,7 +157,7 @@ describe('createShopAccount', () => {
 })
 
 describe('listEmailLogsByShopAccount', () => {
-  it('returns the email notification log rows', async () => {
+  it('メール通知ログの行を返す', async () => {
     const logs = [{ emailNotificationLogId: 'e1', sendStatus: 'SENT' }]
     h.state.selectQueue = [logs]
     expect(await listEmailLogsByShopAccount('s1')).toEqual(logs)
@@ -165,7 +165,7 @@ describe('listEmailLogsByShopAccount', () => {
 })
 
 describe('listEmailNotificationLogsPage', () => {
-  it('returns rows and total from two queries', async () => {
+  it('2つのクエリから行データと合計件数を返す', async () => {
     const rows = [{ emailNotificationLogId: 'e1', sendStatus: 'PENDING' }]
     h.state.selectQueue = [rows, [{ value: 3 }]]
     const result = await listEmailNotificationLogsPage({ shopAccountId: 's1', page: 1, limit: 20 })
@@ -175,7 +175,7 @@ describe('listEmailNotificationLogsPage', () => {
 })
 
 describe('createResendEmailNotificationLog', () => {
-  it('reissues the password hash and inserts a new PENDING email notification log', async () => {
+  it('パスワードハッシュを再発行し、新しいPENDINGのメール通知ログを挿入する', async () => {
     h.state.returningQueue = [[{ emailNotificationLogId: 'e2', sendStatus: 'PENDING' }]]
 
     const result = await createResendEmailNotificationLog({
@@ -199,7 +199,7 @@ describe('createResendEmailNotificationLog', () => {
 })
 
 describe('updateShopAccountStatus', () => {
-  it('updates the account status and updatedAt', async () => {
+  it('アカウントのステータスとupdatedAtを更新する', async () => {
     await updateShopAccountStatus('s1', 'suspended')
     expect(h.state.updateTables).toEqual([shopAccounts])
     expect(h.state.updateSets[0]).toMatchObject({ accountStatus: 'suspended' })
@@ -208,7 +208,7 @@ describe('updateShopAccountStatus', () => {
 })
 
 describe('recordEmailNotificationResult', () => {
-  it('marks the log SUCCESS and stamps notificationSentAt on the account', async () => {
+  it('ログをSUCCESSにし、アカウントのnotificationSentAtを記録する', async () => {
     const now = new Date('2026-01-01T00:00:00Z')
     await recordEmailNotificationResult({
       emailNotificationLogId: 'log-1',
@@ -226,7 +226,7 @@ describe('recordEmailNotificationResult', () => {
     expect(h.state.updateSets[1]).toMatchObject({ notificationSentAt: now })
   })
 
-  it('marks the log FAILURE, records the error, and increments retryCount', async () => {
+  it('ログをFAILUREにし、エラーを記録し、retryCountをインクリメントする', async () => {
     const now = new Date('2026-01-01T00:00:00Z')
     await recordEmailNotificationResult({
       emailNotificationLogId: 'log-1',
@@ -246,7 +246,7 @@ describe('recordEmailNotificationResult', () => {
 })
 
 describe('emailNotificationRetryBackoffMs', () => {
-  it('doubles the backoff for each retry, capped at 24 hours', () => {
+  it('リトライごとにバックオフを倍にし、24時間で頭打ちにする', () => {
     expect(emailNotificationRetryBackoffMs(0)).toBe(5 * 60 * 1000)
     expect(emailNotificationRetryBackoffMs(1)).toBe(10 * 60 * 1000)
     expect(emailNotificationRetryBackoffMs(2)).toBe(20 * 60 * 1000)
@@ -255,7 +255,7 @@ describe('emailNotificationRetryBackoffMs', () => {
 })
 
 describe('findEmailNotificationRetryCandidates', () => {
-  it('excludes rows still within the backoff window', async () => {
+  it('バックオフ期間内の行を除外する', async () => {
     const now = new Date('2026-01-01T00:00:00Z')
     h.state.selectQueue = [
       [
@@ -275,7 +275,7 @@ describe('findEmailNotificationRetryCandidates', () => {
     expect(await findEmailNotificationRetryCandidates(now)).toEqual([])
   })
 
-  it('returns rows past the backoff window without the updatedAt field', async () => {
+  it('バックオフ期間を過ぎた行をupdatedAtフィールドなしで返す', async () => {
     const now = new Date('2026-01-01T00:00:00Z')
     h.state.selectQueue = [
       [
@@ -308,13 +308,13 @@ describe('findEmailNotificationRetryCandidates', () => {
 })
 
 describe('EMAIL_NOTIFICATION_MAX_RETRY_COUNT', () => {
-  it('is a positive number used as the retry ceiling', () => {
+  it('リトライ上限として使われる正の数である', () => {
     expect(EMAIL_NOTIFICATION_MAX_RETRY_COUNT).toBeGreaterThan(0)
   })
 })
 
 describe('markEmailNotificationForRetry', () => {
-  it('reissues the password hash and resets the log to PENDING', async () => {
+  it('パスワードハッシュを再発行し、ログをPENDINGにリセットする', async () => {
     const now = new Date('2026-01-01T00:00:00Z')
     await markEmailNotificationForRetry({
       emailNotificationLogId: 'e1',

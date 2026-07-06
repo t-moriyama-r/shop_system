@@ -32,7 +32,7 @@ beforeEach(() => {
 })
 
 describe('retryFailedEmailNotifications', () => {
-  it('does nothing when there are no retry candidates', async () => {
+  it('再送対象が存在しない場合は何もしない', async () => {
     findEmailNotificationRetryCandidates.mockResolvedValue([])
 
     const count = await retryFailedEmailNotifications()
@@ -43,7 +43,7 @@ describe('retryFailedEmailNotifications', () => {
     expect(recordAuditLog).not.toHaveBeenCalled()
   })
 
-  it('reissues a password, resets the log, resends, and records an audit log per candidate', async () => {
+  it('各候補についてパスワードを再発行し、ログをリセットし、再送信して監査ログを記録する', async () => {
     const now = new Date('2026-01-01T00:00:00Z')
     findEmailNotificationRetryCandidates.mockResolvedValue([candidate])
 
@@ -83,7 +83,7 @@ describe('retryFailedEmailNotifications', () => {
     )
   })
 
-  it('processes multiple candidates independently', async () => {
+  it('複数の候補をそれぞれ独立して処理する', async () => {
     const other = { ...candidate, emailNotificationLogId: 'log-2', shopAccountId: 'shop-2' }
     findEmailNotificationRetryCandidates.mockResolvedValue([candidate, other])
 

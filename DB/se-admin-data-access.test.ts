@@ -60,7 +60,7 @@ beforeEach(() => {
 })
 
 describe('listSeAdminUsers', () => {
-  it('returns rows and total from two queries', async () => {
+  it('2つのクエリから行データと総件数を返す', async () => {
     const rows = [{ seAdminUserId: 'u1', email: 'a@example.com' }]
     h.state.selectQueue = [rows, [{ value: 42 }]]
 
@@ -71,19 +71,19 @@ describe('listSeAdminUsers', () => {
 })
 
 describe('findActiveSeAdminById / findActiveSeAdminByEmail', () => {
-  it('returns the first matching row', async () => {
+  it('最初に一致した行を返す', async () => {
     h.state.selectQueue = [[{ seAdminUserId: 'u1', email: 'a@example.com' }]]
     expect(await findActiveSeAdminById('u1')).toMatchObject({ seAdminUserId: 'u1' })
   })
 
-  it('returns undefined when nothing matches', async () => {
+  it('一致するものがない場合はundefinedを返す', async () => {
     h.state.selectQueue = [[]]
     expect(await findActiveSeAdminByEmail('missing@example.com')).toBeUndefined()
   })
 })
 
 describe('softDeleteSeAdminUser', () => {
-  it('logically deletes the user and invalidates sessions, returning the count', async () => {
+  it('ユーザーを論理削除し、セッションを無効化して件数を返す', async () => {
     h.state.deleteReturning = [{ sessionId: 's1' }, { sessionId: 's2' }]
     const count = await softDeleteSeAdminUser('u1')
     expect(count).toBe(2)
@@ -95,31 +95,31 @@ describe('softDeleteSeAdminUser', () => {
 })
 
 describe('setSeAdminLock', () => {
-  it('sets isLocked=true without resetting the failure count', async () => {
+  it('失敗回数をリセットせずにisLocked=trueを設定する', async () => {
     await setSeAdminLock('u1', true)
     expect(h.state.updateSets[0]).toMatchObject({ isLocked: true })
     expect(h.state.updateSets[0]).not.toHaveProperty('failedLoginCount')
   })
 
-  it('resets the failure count when unlocking', async () => {
+  it('ロック解除時に失敗回数をリセットする', async () => {
     await setSeAdminLock('u1', false)
     expect(h.state.updateSets[0]).toMatchObject({ isLocked: false, failedLoginCount: 0 })
   })
 })
 
 describe('login state updates', () => {
-  it('recordSuccessfulLogin resets the failure count and records lastLoginAt', async () => {
+  it('recordSuccessfulLoginは失敗回数をリセットし、lastLoginAtを記録する', async () => {
     await recordSuccessfulLogin('u1')
     expect(h.state.updateSets[0]).toMatchObject({ failedLoginCount: 0 })
     expect(h.state.updateSets[0]).toHaveProperty('lastLoginAt')
   })
 
-  it('applyFailedLoginAttempt persists the new count and lock state', async () => {
+  it('applyFailedLoginAttemptは新しい失敗回数とロック状態を永続化する', async () => {
     await applyFailedLoginAttempt('u1', 5, true)
     expect(h.state.updateSets[0]).toMatchObject({ failedLoginCount: 5, isLocked: true })
   })
 
-  it('setSeAdminPassword stores the hashed password', async () => {
+  it('setSeAdminPasswordはハッシュ化されたパスワードを保存する', async () => {
     await setSeAdminPassword('u1', 'hashed')
     expect(h.state.updateSets[0]).toMatchObject({ password: 'hashed' })
   })

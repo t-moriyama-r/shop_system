@@ -13,7 +13,7 @@ beforeEach(() => {
 })
 
 describe('listAuditLogsHandler', () => {
-  it('returns rows with pagination metadata (default limit 50)', async () => {
+  it('ページネーション情報付きで結果を返す（デフォルトlimitは50）', async () => {
     listAuditLogs.mockResolvedValue({ rows: [{ auditLogId: 'a1' }], total: 120 })
     const r = await listAuditLogsHandler({})
     expect(r.status).toBe(200)
@@ -21,13 +21,13 @@ describe('listAuditLogsHandler', () => {
     expect(listAuditLogs).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 50 }))
   })
 
-  it('caps limit at the maximum (100)', async () => {
+  it('limitの上限（100）でキャップする', async () => {
     const r = await listAuditLogsHandler({ limit: '500' })
     expect(r.body).toMatchObject({ pagination: { limit: 100 } })
     expect(listAuditLogs).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }))
   })
 
-  it('forwards filters to the data-access layer', async () => {
+  it('フィルタ条件をデータアクセス層に渡す', async () => {
     const r = await listAuditLogsHandler({
       actionType: 'SE_ADMIN_DELETE',
       result: 'SUCCESS',
@@ -51,25 +51,25 @@ describe('listAuditLogsHandler', () => {
     )
   })
 
-  it('rejects a non-UUID seAdminUserId with 400 (does not query)', async () => {
+  it('seAdminUserIdがUUID形式でない場合は400を返す（クエリを実行しない）', async () => {
     const r = await listAuditLogsHandler({ seAdminUserId: 'not-a-uuid' })
     expect(r.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()
   })
 
-  it('rejects a non-UUID targetId with 400', async () => {
+  it('targetIdがUUID形式でない場合は400を返す', async () => {
     const r = await listAuditLogsHandler({ targetId: 'not-a-uuid' })
     expect(r.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()
   })
 
-  it('rejects an invalid dateFrom with 400', async () => {
+  it('dateFromが不正な場合は400を返す', async () => {
     const r = await listAuditLogsHandler({ dateFrom: 'not-a-date' })
     expect(r.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()
   })
 
-  it('rejects an invalid dateTo with 400', async () => {
+  it('dateToが不正な場合は400を返す', async () => {
     const r = await listAuditLogsHandler({ dateTo: 'not-a-date' })
     expect(r.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()

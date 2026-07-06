@@ -74,7 +74,7 @@ describe('createShopAccountHandler', () => {
     meta,
   }
 
-  it('rejects missing required fields with 400 (does not query)', async () => {
+  it('必須フィールドが欠けている場合は400を返す（クエリは実行しない）', async () => {
     for (const missing of ['shopName', 'contactName', 'email'] as const) {
       const r = await createShopAccountHandler({ ...validInput, [missing]: '  ' })
       expect(r.status).toBe(400)
@@ -83,25 +83,25 @@ describe('createShopAccountHandler', () => {
     expect(createShopAccount).not.toHaveBeenCalled()
   })
 
-  it('rejects a malformed email with 400', async () => {
+  it('不正な形式のメールアドレスの場合は400を返す', async () => {
     const r = await createShopAccountHandler({ ...validInput, email: 'not-an-email' })
     expect(r.status).toBe(400)
     expect(createShopAccount).not.toHaveBeenCalled()
   })
 
-  it('rejects an over-length field with 400', async () => {
+  it('文字数上限を超えるフィールドの場合は400を返す', async () => {
     const r = await createShopAccountHandler({ ...validInput, shopName: 'a'.repeat(256) })
     expect(r.status).toBe(400)
   })
 
-  it('returns 409 when the email already exists (does not create)', async () => {
+  it('メールアドレスが既に存在する場合は409を返す（作成しない）', async () => {
     findShopAccountByEmail.mockResolvedValue({ shopAccountId: 'existing' })
     const r = await createShopAccountHandler(validInput)
     expect(r.status).toBe(409)
     expect(createShopAccount).not.toHaveBeenCalled()
   })
 
-  it('creates the account, stores only a hash, and records an audit log', async () => {
+  it('アカウントを作成し、ハッシュのみを保存し、監査ログを記録する', async () => {
     const r = await createShopAccountHandler(validInput)
     expect(r.status).toBe(201)
     expect(r.body).toMatchObject({ shopAccount: { shopAccountId: VALID_UUID } })
@@ -147,7 +147,7 @@ describe('createShopAccountHandler', () => {
     expect(bodyJson).not.toContain(sendArg.temporaryPassword)
   })
 
-  it('trims whitespace from fields before persisting', async () => {
+  it('保存前にフィールドの前後の空白をトリムする', async () => {
     await createShopAccountHandler({
       ...validInput,
       shopName: '  Shop  ',
@@ -158,7 +158,7 @@ describe('createShopAccountHandler', () => {
     )
   })
 
-  it('still returns 201 even if the notification send rejects (fire-and-forget)', async () => {
+  it('通知送信が失敗しても201を返す（fire-and-forget）', async () => {
     sendShopAccountIssuedNotification.mockRejectedValue(new Error('smtp down'))
     const r = await createShopAccountHandler(validInput)
     expect(r.status).toBe(201)
@@ -166,14 +166,14 @@ describe('createShopAccountHandler', () => {
 })
 
 describe('listShopAccountsHandler', () => {
-  it('returns rows with pagination metadata (default limit 20)', async () => {
+  it('行データとページネーション情報を返す（デフォルトlimit 20）', async () => {
     listShopAccounts.mockResolvedValue({ rows: [{ shopAccountId: 's1' }], total: 45 })
     const r = await listShopAccountsHandler({})
     expect(r.status).toBe(200)
     expect(r.body).toMatchObject({ pagination: { page: 1, limit: 20, total: 45, totalPages: 3 } })
   })
 
-  it('excludes deleted by default and includes them when includeDeleted=true', async () => {
+  it('デフォルトでは削除済みを除外し、includeDeleted=trueの場合は含める', async () => {
     await listShopAccountsHandler({})
     expect(listShopAccounts).toHaveBeenLastCalledWith(
       expect.objectContaining({ includeDeleted: false }),
@@ -184,37 +184,37 @@ describe('listShopAccountsHandler', () => {
     )
   })
 
-  it('forwards a valid status filter', async () => {
+  it('有効なステータスフィルタをそのまま渡す', async () => {
     await listShopAccountsHandler({ status: 'active' })
     expect(listShopAccounts).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }))
   })
 
-  it('rejects an invalid status with 400 (does not query)', async () => {
+  it('不正なステータスの場合は400を返す（クエリは実行しない）', async () => {
     const r = await listShopAccountsHandler({ status: 'archived' })
     expect(r.status).toBe(400)
     expect(listShopAccounts).not.toHaveBeenCalled()
   })
 
-  it('caps limit at the maximum (100)', async () => {
+  it('limitを上限（100）に丸める', async () => {
     const r = await listShopAccountsHandler({ limit: '500' })
     expect(r.body).toMatchObject({ pagination: { limit: 100 } })
   })
 })
 
 describe('getShopAccountHandler', () => {
-  it('rejects a non-UUID id with 400', async () => {
+  it('UUID形式でないidの場合は400を返す', async () => {
     const r = await getShopAccountHandler({ shopAccountId: 'not-a-uuid' })
     expect(r.status).toBe(400)
     expect(findShopAccountById).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when not found (or logically deleted)', async () => {
+  it('見つからない場合（または論理削除済みの場合）は404を返す', async () => {
     findShopAccountById.mockResolvedValue(undefined)
     const r = await getShopAccountHandler({ shopAccountId: VALID_UUID })
     expect(r.status).toBe(404)
   })
 
-  it('returns the account with its email notification logs', async () => {
+  it('アカウントとそのメール通知ログを返す', async () => {
     findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
     listEmailLogsByShopAccount.mockResolvedValue([{ emailNotificationLogId: 'e1' }])
     const r = await getShopAccountHandler({ shopAccountId: VALID_UUID })
@@ -227,7 +227,7 @@ describe('getShopAccountHandler', () => {
 })
 
 describe('updateShopAccountStatusHandler', () => {
-  it('rejects a non-UUID id with 400', async () => {
+  it('UUID形式でないidの場合は400を返す', async () => {
     const r = await updateShopAccountStatusHandler({
       shopAccountId: 'bad',
       operator,
@@ -237,7 +237,7 @@ describe('updateShopAccountStatusHandler', () => {
     expect(r.status).toBe(400)
   })
 
-  it('rejects an invalid status with 400 (does not query)', async () => {
+  it('不正なステータスの場合は400を返す（クエリは実行しない）', async () => {
     const r = await updateShopAccountStatusHandler({
       shopAccountId: VALID_UUID,
       operator,
@@ -248,7 +248,7 @@ describe('updateShopAccountStatusHandler', () => {
     expect(findShopAccountById).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when the account does not exist', async () => {
+  it('アカウントが存在しない場合は404を返す', async () => {
     findShopAccountById.mockResolvedValue(undefined)
     const r = await updateShopAccountStatusHandler({
       shopAccountId: VALID_UUID,
@@ -260,7 +260,7 @@ describe('updateShopAccountStatusHandler', () => {
     expect(updateShopAccountStatus).not.toHaveBeenCalled()
   })
 
-  it('updates status and records an audit log', async () => {
+  it('ステータスを更新し、監査ログを記録する', async () => {
     findShopAccountById.mockResolvedValue({
       shopAccountId: VALID_UUID,
       email: 'a@example.com',
@@ -287,20 +287,20 @@ describe('updateShopAccountStatusHandler', () => {
 })
 
 describe('listNotificationLogsHandler', () => {
-  it('rejects a non-UUID id with 400', async () => {
+  it('UUID形式でないidの場合は400を返す', async () => {
     const r = await listNotificationLogsHandler({ shopAccountId: 'not-a-uuid' })
     expect(r.status).toBe(400)
     expect(findShopAccountById).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when the account does not exist', async () => {
+  it('アカウントが存在しない場合は404を返す', async () => {
     findShopAccountById.mockResolvedValue(undefined)
     const r = await listNotificationLogsHandler({ shopAccountId: VALID_UUID })
     expect(r.status).toBe(404)
     expect(listEmailNotificationLogsPage).not.toHaveBeenCalled()
   })
 
-  it('returns rows with pagination metadata (default limit 20)', async () => {
+  it('行データとページネーション情報を返す（デフォルトlimit 20）', async () => {
     findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
     listEmailNotificationLogsPage.mockResolvedValue({
       rows: [{ emailNotificationLogId: 'e1' }],
@@ -317,7 +317,7 @@ describe('listNotificationLogsHandler', () => {
     )
   })
 
-  it('caps limit at the maximum (100)', async () => {
+  it('limitを上限（100）に丸める', async () => {
     findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
     const r = await listNotificationLogsHandler({ shopAccountId: VALID_UUID, limit: '500' })
     expect(r.body).toMatchObject({ pagination: { limit: 100 } })
@@ -325,20 +325,20 @@ describe('listNotificationLogsHandler', () => {
 })
 
 describe('resendNotificationHandler', () => {
-  it('rejects a non-UUID id with 400', async () => {
+  it('UUID形式でないidの場合は400を返す', async () => {
     const r = await resendNotificationHandler({ shopAccountId: 'bad', operator, meta })
     expect(r.status).toBe(400)
     expect(findShopAccountById).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when the account does not exist', async () => {
+  it('アカウントが存在しない場合は404を返す', async () => {
     findShopAccountById.mockResolvedValue(undefined)
     const r = await resendNotificationHandler({ shopAccountId: VALID_UUID, operator, meta })
     expect(r.status).toBe(404)
     expect(createResendEmailNotificationLog).not.toHaveBeenCalled()
   })
 
-  it('creates a new PENDING log with a freshly issued password hash, records an audit log, and triggers the send', async () => {
+  it('新しく発行したパスワードハッシュでPENDINGログを作成し、監査ログを記録し、送信をトリガーする', async () => {
     findShopAccountById.mockResolvedValue({
       shopAccountId: VALID_UUID,
       email: 'a@example.com',

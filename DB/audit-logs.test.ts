@@ -59,7 +59,7 @@ beforeEach(() => {
 })
 
 describe('listAuditLogs', () => {
-  it('returns rows and total', async () => {
+  it('行データと総件数を返す', async () => {
     const rows = [{ auditLogId: 'a1', actionType: 'SE_ADMIN_CREATE' }]
     h.state.selectQueue = [rows, [{ value: 120 }]]
 
@@ -68,14 +68,14 @@ describe('listAuditLogs', () => {
     expect(result.total).toBe(120)
   })
 
-  it('omits the WHERE clause when no filters are provided', async () => {
+  it('フィルタが指定されない場合はWHERE句を省略する', async () => {
     h.state.selectQueue = [[], [{ value: 0 }]]
     await listAuditLogs({ page: 1, limit: 50 })
     // 行取得・件数取得の両方で where(undefined)
     expect(h.state.whereArgs[0]).toBeUndefined()
   })
 
-  it('builds a WHERE clause when filters are provided', async () => {
+  it('フィルタが指定された場合はWHERE句を組み立てる', async () => {
     h.state.selectQueue = [[], [{ value: 0 }]]
     await listAuditLogs({
       page: 1,
@@ -89,18 +89,18 @@ describe('listAuditLogs', () => {
 })
 
 describe('auditLogRetentionCutoff', () => {
-  it('subtracts the retention period from the given time', () => {
+  it('指定日時から保持期間を差し引く', () => {
     const cutoff = auditLogRetentionCutoff(new Date('2026-07-06T00:00:00Z'))
     expect(cutoff.toISOString()).toBe('2026-06-06T00:00:00.000Z')
   })
 
-  it('uses a one-month retention period', () => {
+  it('保持期間として1か月を使用する', () => {
     expect(AUDIT_LOG_RETENTION_MONTHS).toBe(1)
   })
 })
 
 describe('deleteExpiredAuditLogs', () => {
-  it('deletes audit logs older than the cutoff and returns the number of deleted rows', async () => {
+  it('カットオフより古い監査ログを削除し、削除件数を返す', async () => {
     h.state.deleteReturning = [{ auditLogId: 'a' }, { auditLogId: 'b' }]
     const count = await deleteExpiredAuditLogs(new Date('2026-06-06T00:00:00Z'))
     expect(count).toBe(2)
@@ -111,7 +111,7 @@ describe('deleteExpiredAuditLogs', () => {
     expect(h2.executedSql).toHaveLength(1)
   })
 
-  it('returns 0 when no audit logs are expired', async () => {
+  it('期限切れの監査ログがない場合は0を返す', async () => {
     h.state.deleteReturning = []
     expect(await deleteExpiredAuditLogs(new Date('2026-06-06T00:00:00Z'))).toBe(0)
   })
