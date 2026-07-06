@@ -25,15 +25,26 @@ const h = vi.hoisted(() => {
   return { state, makeChain }
 })
 
-vi.mock('./client', () => ({
-  db: {
-    select: () => h.makeChain(() => h.state.selectQueue.shift() ?? []),
+const h2 = vi.hoisted(() => ({ executedSql: [] as unknown[] }))
+
+vi.mock('./client', () => {
+  const tx = {
+    execute: (query: unknown) => {
+      h2.executedSql.push(query)
+      return Promise.resolve()
+    },
     delete: (table: unknown) => {
       h.state.deleteTables.push(table)
       return h.makeChain(() => h.state.deleteReturning)
     },
-  },
-}))
+  }
+  return {
+    db: {
+      select: () => h.makeChain(() => h.state.selectQueue.shift() ?? []),
+      transaction: (fn: (tx: unknown) => unknown) => fn(tx),
+    },
+  }
+})
 
 const { listAuditLogs, deleteExpiredAuditLogs, auditLogRetentionCutoff, AUDIT_LOG_RETENTION_MONTHS } =
   await import('./audit-logs')
@@ -44,6 +55,7 @@ beforeEach(() => {
   h.state.deleteReturning = []
   h.state.deleteTables = []
   h.state.whereArgs = []
+  h2.executedSql = []
 })
 
 describe('listAuditLogs', () => {
@@ -95,6 +107,8 @@ describe('deleteExpiredAuditLogs', () => {
     expect(h.state.deleteTables).toEqual([auditLogs])
     // カットオフ条件で WHERE 句を組み立てている
     expect(h.state.whereArgs[0]).toBeDefined()
+    // DB トリガーの改ざん防止を回避するため、削除許可フラグをトランザクション内で有効化している
+    expect(h2.executedSql).toHaveLength(1)
   })
 
   it('returns 0 when no audit logs are expired', async () => {
