@@ -1,6 +1,6 @@
 'use client'
 
-import type { Pagination } from '../types'
+import type { Pagination } from '@/lib/repositories/se-admin-users'
 
 export function PaginationControls({
   pagination,

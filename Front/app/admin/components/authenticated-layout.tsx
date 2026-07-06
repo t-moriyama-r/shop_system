@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { API_BASE_URL as API_BASE } from '@/lib/config'
 import { AdminHeader } from './admin-header'
 import { AdminSidebar } from './admin-sidebar'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
 
 interface SessionUser {
   seAdminUserId: string

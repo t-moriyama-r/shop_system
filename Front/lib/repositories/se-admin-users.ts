@@ -1,8 +1,23 @@
-import type { Pagination, SeAdminUser } from './types'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'
+import { API_BASE_URL } from '@/lib/config'
 
 export const PAGE_SIZE = 20
+
+export interface SeAdminUser {
+  seAdminUserId: string
+  email: string
+  isLocked: boolean
+  failedLoginCount: number
+  lastLoginAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Pagination {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
 
 export interface SeAdminUsersResponse {
   data: SeAdminUser[]
@@ -13,11 +28,6 @@ export interface ListParams {
   page: number
   sort: string
   keyword: string
-}
-
-export interface SessionUser {
-  seAdminUserId: string
-  email: string
 }
 
 async function readErrorMessage(res: Response, fallback: string): Promise<string> {
@@ -33,21 +43,15 @@ export async function fetchSeAdminUsers({
   const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort })
   if (keyword) params.set('keyword', keyword)
 
-  const res = await fetch(`${API_BASE}/api/se-admin-users?${params.toString()}`, {
+  const res = await fetch(`${API_BASE_URL}/api/se-admin-users?${params.toString()}`, {
     credentials: 'include',
   })
   if (!res.ok) throw new Error('一覧の取得に失敗しました')
   return res.json()
 }
 
-export async function fetchCurrentUser(): Promise<SessionUser | null> {
-  const res = await fetch(`${API_BASE}/api/auth/session`, { credentials: 'include' })
-  if (!res.ok) return null
-  return res.json()
-}
-
 export async function unlockSeAdminUser(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/se-admin-users/${id}/lock`, {
+  const res = await fetch(`${API_BASE_URL}/api/se-admin-users/${id}/lock`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -57,7 +61,7 @@ export async function unlockSeAdminUser(id: string): Promise<void> {
 }
 
 export async function deleteSeAdminUser(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/se-admin-users/${id}`, {
+  const res = await fetch(`${API_BASE_URL}/api/se-admin-users/${id}`, {
     method: 'DELETE',
     credentials: 'include',
   })

@@ -62,14 +62,28 @@ Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` �
 
 ### 1コンポーネント＝1ファイル（page ファイルを肥大化させない）
 
-`page.tsx` に画面ロジックや子コンポーネントを全部書かない。`page.tsx` はレイアウト（`AuthenticatedLayout` 等）とコンテナの配線だけを行う薄いファイルにする。テーブル・ツールバー・ダイアログ・ページネーションなどの**子コンポーネントはそれぞれ別ファイルに切り出す**（`app/<screen>/components/*.tsx`）。型は `types.ts`、API 呼び出しは `api.ts` に分離する。
+`page.tsx` に画面ロジックや子コンポーネントを全部書かない。`page.tsx` はレイアウト（`AuthenticatedLayout` 等）とコンテナの配線だけを行う薄いファイルにする。テーブル・ツールバー・ダイアログ・ページネーションなどの**子コンポーネントはそれぞれ別ファイルに切り出す**（`app/<screen>/components/*.tsx`）。
 
 - NG: `page.tsx` の中に `AccountsContent` / `DeleteConfirmDialog` などを全部定義して 400 行になる
 - OK:
   - `app/admin/accounts/page.tsx` … `AuthenticatedLayout` + `<AccountsContent />` だけ
   - `app/admin/accounts/components/accounts-content.tsx` … 状態管理・データ取得のコンテナ
   - `app/admin/accounts/components/{se-admin-user-table,accounts-toolbar,pagination-controls,delete-confirm-dialog}.tsx` … 各プレゼンテーション
-  - `app/admin/accounts/types.ts` … 型定義、`app/admin/accounts/api.ts` … fetch 関数
+
+### API 呼び出しは repository 層に置く（page/component 配下に書かない）
+
+fetch を伴う API 呼び出しと、それに対応するドメイン型は、**特定の画面配下（`app/<screen>/`）ではなく、画面から切り離した repository 層 `lib/repositories/*.ts` に定義する**。同じ API が複数ページから呼ばれ得るため、責務をコンポーネントツリーの下に置かない。
+
+- NG: `app/admin/accounts/api.ts` に `fetchSeAdminUsers` を置く（accounts 画面に責務が閉じてしまう）
+- OK: `lib/repositories/se-admin-users.ts` に `fetchSeAdminUsers` / `unlockSeAdminUser` / `deleteSeAdminUser` と型（`SeAdminUser` / `Pagination`）を定義し、`lib/repositories/session.ts` に `fetchCurrentUser` を定義。各コンポーネントは `@/lib/repositories/...` から import する
+- repository 関数は React 非依存の純粋関数にする（`useQuery`/`useMutation` の `queryFn`/`mutationFn` から呼ぶ）
+
+### プロジェクト全体で使う設定値は上位レイヤーに一元化する
+
+API のベースURLのような**プロジェクト全体に関わる定数を各ファイルで再定義しない**。単一の定義元（`lib/config.ts` の `API_BASE_URL`）を作り、そこから import する。
+
+- NG: 複数ファイルで `const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'` を各自定義
+- OK: `lib/config.ts` に `export const API_BASE_URL = ...` を置き、`import { API_BASE_URL } from '@/lib/config'` で参照（`lib/api.ts` の Hono クライアントも同じ定義を使う）
 
 ### `useState` にはジェネリクスを明示する
 

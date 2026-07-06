@@ -1,6 +1,6 @@
 'use client'
 
-import type { SeAdminUser } from '../types'
+import type { SeAdminUser } from '@/lib/repositories/se-admin-users'
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—'

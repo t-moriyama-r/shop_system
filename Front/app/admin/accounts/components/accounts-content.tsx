@@ -4,11 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
   deleteSeAdminUser,
-  fetchCurrentUser,
   fetchSeAdminUsers,
   unlockSeAdminUser,
-} from '../api'
-import type { SeAdminUser } from '../types'
+  type SeAdminUser,
+} from '@/lib/repositories/se-admin-users'
+import { fetchCurrentUser } from '@/lib/repositories/session'
 import { AccountsToolbar } from './accounts-toolbar'
 import { DeleteConfirmDialog } from './delete-confirm-dialog'
 import { PaginationControls } from './pagination-controls'
