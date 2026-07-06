@@ -10,7 +10,8 @@
     "./se-admin": "./se-admin.ts",
     "./sessions": "./sessions.ts",
     "./audit-logs": "./audit-logs.ts",
-    "./shop-accounts": "./shop-accounts.ts"
+    "./shop-accounts": "./shop-accounts.ts",
+    "./dashboard": "./dashboard.ts"
   },
   "scripts": {
     "preinstall": "npx only-allow pnpm",

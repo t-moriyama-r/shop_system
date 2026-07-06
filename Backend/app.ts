@@ -8,6 +8,7 @@ import { auth } from './routes/auth'
 import { seAdminUsersRoute } from './routes/se-admin-users'
 import { auditLogsRoute } from './routes/audit-logs'
 import { shopAccountsRoute } from './routes/shop-accounts'
+import { dashboardRoute } from './routes/dashboard'
 
 const app = new Hono()
 
@@ -43,6 +44,7 @@ const routes = app
   .route('/api/se-admin-users', seAdminUsersRoute)
   .route('/api/audit-logs', auditLogsRoute)
   .route('/api/shop-accounts', shopAccountsRoute)
+  .route('/api/dashboard', dashboardRoute)
 
 export type AppType = typeof routes
 
