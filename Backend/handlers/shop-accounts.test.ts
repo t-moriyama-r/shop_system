@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const listShopAccounts = vi.fn()
 const findShopAccountById = vi.fn()
+const findShopAccountByEmail = vi.fn()
+const createShopAccount = vi.fn()
 const listEmailLogsByShopAccount = vi.fn()
 const updateShopAccountStatus = vi.fn()
 
@@ -12,6 +14,8 @@ vi.mock('db/shop-accounts', async () => {
     isShopAccountStatus: (v: string) => (statuses as readonly string[]).includes(v),
     listShopAccounts: (...a: unknown[]) => listShopAccounts(...a),
     findShopAccountById: (...a: unknown[]) => findShopAccountById(...a),
+    findShopAccountByEmail: (...a: unknown[]) => findShopAccountByEmail(...a),
+    createShopAccount: (...a: unknown[]) => createShopAccount(...a),
     listEmailLogsByShopAccount: (...a: unknown[]) => listEmailLogsByShopAccount(...a),
     updateShopAccountStatus: (...a: unknown[]) => updateShopAccountStatus(...a),
   }
@@ -20,8 +24,12 @@ vi.mock('db/shop-accounts', async () => {
 const recordAuditLog = vi.fn()
 vi.mock('../lib/audit-log', () => ({ recordAuditLog: (...a: unknown[]) => recordAuditLog(...a) }))
 
-const { listShopAccountsHandler, getShopAccountHandler, updateShopAccountStatusHandler } =
-  await import('./shop-accounts')
+const {
+  listShopAccountsHandler,
+  getShopAccountHandler,
+  updateShopAccountStatusHandler,
+  createShopAccountHandler,
+} = await import('./shop-accounts')
 
 const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000'
 const operator = { seAdminUserId: 'op-1', email: 'op@example.com', isPasswordSet: true }
@@ -32,6 +40,87 @@ beforeEach(() => {
   listShopAccounts.mockResolvedValue({ rows: [], total: 0 })
   listEmailLogsByShopAccount.mockResolvedValue([])
   updateShopAccountStatus.mockResolvedValue(undefined)
+  findShopAccountByEmail.mockResolvedValue(undefined)
+  createShopAccount.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'shop@example.com' })
+})
+
+describe('createShopAccountHandler', () => {
+  const validInput = {
+    shopName: 'テストショップ',
+    contactName: '山田太郎',
+    email: 'shop@example.com',
+    operator,
+    meta,
+  }
+
+  it('rejects missing required fields with 400 (does not query)', async () => {
+    for (const missing of ['shopName', 'contactName', 'email'] as const) {
+      const r = await createShopAccountHandler({ ...validInput, [missing]: '  ' })
+      expect(r.status).toBe(400)
+    }
+    expect(findShopAccountByEmail).not.toHaveBeenCalled()
+    expect(createShopAccount).not.toHaveBeenCalled()
+  })
+
+  it('rejects a malformed email with 400', async () => {
+    const r = await createShopAccountHandler({ ...validInput, email: 'not-an-email' })
+    expect(r.status).toBe(400)
+    expect(createShopAccount).not.toHaveBeenCalled()
+  })
+
+  it('rejects an over-length field with 400', async () => {
+    const r = await createShopAccountHandler({ ...validInput, shopName: 'a'.repeat(256) })
+    expect(r.status).toBe(400)
+  })
+
+  it('returns 409 when the email already exists (does not create)', async () => {
+    findShopAccountByEmail.mockResolvedValue({ shopAccountId: 'existing' })
+    const r = await createShopAccountHandler(validInput)
+    expect(r.status).toBe(409)
+    expect(createShopAccount).not.toHaveBeenCalled()
+  })
+
+  it('creates the account, stores only a hash, and records an audit log', async () => {
+    const r = await createShopAccountHandler(validInput)
+    expect(r.status).toBe(201)
+    expect(r.body).toMatchObject({ shopAccount: { shopAccountId: VALID_UUID } })
+
+    const createArg = createShopAccount.mock.calls[0][0]
+    expect(createArg).toMatchObject({
+      shopName: 'テストショップ',
+      contactName: '山田太郎',
+      email: 'shop@example.com',
+      issuedBySeAdminUserId: 'op-1',
+    })
+    expect(typeof createArg.initialPasswordHash).toBe('string')
+    expect(createArg.initialPasswordHash.length).toBeGreaterThan(0)
+    expect(createArg.initialPasswordHash).not.toBe('shop@example.com')
+
+    // 平文パスワード/ハッシュはレスポンスに含めない（設計 BP-003 備考）。
+    const bodyJson = JSON.stringify(r.body)
+    expect(bodyJson).not.toContain(createArg.initialPasswordHash)
+    expect(bodyJson.toLowerCase()).not.toContain('password')
+
+    expect(recordAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'SHOP_ACCOUNT_CREATE',
+        targetType: 'shop_account',
+        targetId: VALID_UUID,
+        result: 'SUCCESS',
+      }),
+    )
+  })
+
+  it('trims whitespace from fields before persisting', async () => {
+    await createShopAccountHandler({
+      ...validInput,
+      shopName: '  Shop  ',
+      email: '  shop@example.com  ',
+    })
+    expect(createShopAccount).toHaveBeenCalledWith(
+      expect.objectContaining({ shopName: 'Shop', email: 'shop@example.com' }),
+    )
+  })
 })
 
 describe('listShopAccountsHandler', () => {
