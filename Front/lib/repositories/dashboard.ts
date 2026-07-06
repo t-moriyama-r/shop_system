@@ -1,6 +1,14 @@
+import { queryOptions } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/config'
 
-export const ACTIVITIES_LIMIT = 10
+export const DEFAULT_ACTIVITIES_LIMIT = 10
+
+// クエリキーは複数ページ・キャッシュ無効化で共有するため repository 層に集約する。
+export const dashboardKeys = {
+  all: ['dashboard'] as const,
+  summary: () => [...dashboardKeys.all, 'summary'] as const,
+  activities: (limit: number) => [...dashboardKeys.all, 'shop-account-activities', limit] as const,
+}
 
 export interface DashboardSummary {
   systemStatus: string
@@ -46,7 +54,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 }
 
 export async function fetchShopAccountActivities(
-  limit: number = ACTIVITIES_LIMIT,
+  limit: number = DEFAULT_ACTIVITIES_LIMIT,
 ): Promise<ShopAccountActivitiesResponse> {
   const params = new URLSearchParams({ limit: String(limit) })
   const res = await fetch(
@@ -55,4 +63,18 @@ export async function fetchShopAccountActivities(
   )
   if (!res.ok) throw new Error('発行状況の取得に失敗しました')
   return res.json()
+}
+
+export function dashboardSummaryQuery() {
+  return queryOptions({
+    queryKey: dashboardKeys.summary(),
+    queryFn: fetchDashboardSummary,
+  })
+}
+
+export function shopAccountActivitiesQuery(limit: number = DEFAULT_ACTIVITIES_LIMIT) {
+  return queryOptions({
+    queryKey: dashboardKeys.activities(limit),
+    queryFn: () => fetchShopAccountActivities(limit),
+  })
 }

@@ -54,8 +54,6 @@ function SummaryFooter({ summary }: SummaryDataProps) {
   )
 }
 
-// 以下、コンポーネント以外の定義（型・ヘルパー）
-
 interface SystemStatus {
   label: string
   variant: 'success' | 'danger'

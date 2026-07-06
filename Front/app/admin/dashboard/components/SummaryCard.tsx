@@ -15,8 +15,6 @@ export function SummaryCard({ label, value, variant = 'default' }: Props) {
   )
 }
 
-// 以下、コンポーネント以外の定義（型・定数）
-
 export type SummaryCardVariant = 'default' | 'success' | 'warning' | 'danger'
 
 const VALUE_COLOR: Record<SummaryCardVariant, string> = {

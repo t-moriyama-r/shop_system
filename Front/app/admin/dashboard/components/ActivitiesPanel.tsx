@@ -134,8 +134,6 @@ function NotificationCell({ notification }: NotificationCellProps) {
   )
 }
 
-// 以下、コンポーネント以外の定義（定数・ヘルパー）
-
 const ACCOUNT_STATUS: Record<string, { label: string; className: string }> = {
   active: { label: '有効', className: 'bg-green-100 text-green-700' },
   pending: { label: '保留', className: 'bg-amber-100 text-amber-700' },

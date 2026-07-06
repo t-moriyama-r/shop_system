@@ -1,20 +1,13 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { fetchDashboardSummary, fetchShopAccountActivities } from '@/lib/repositories/dashboard'
+import { dashboardSummaryQuery, shopAccountActivitiesQuery } from '@/lib/repositories/dashboard'
 import { ActivitiesPanel } from './ActivitiesPanel'
 import { SummaryPanel } from './SummaryPanel'
 
 export function DashboardContent() {
-  const summaryQuery = useQuery({
-    queryKey: ['dashboard', 'summary'],
-    queryFn: fetchDashboardSummary,
-  })
-
-  const activitiesQuery = useQuery({
-    queryKey: ['dashboard', 'shop-account-activities'],
-    queryFn: () => fetchShopAccountActivities(),
-  })
+  const summaryQuery = useQuery(dashboardSummaryQuery())
+  const activitiesQuery = useQuery(shopAccountActivitiesQuery())
 
   return (
     <div className="space-y-6">
