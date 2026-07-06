@@ -55,3 +55,38 @@ Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` �
 - OK: route は `const result = await listSeAdminUsersHandler({ page: c.req.query('page'), ... }); return c.json(result.body, result.status)` のように handler を呼ぶだけ。handler が検証・分岐・`listSeAdminUsers(filters)` 等のデータアクセス関数呼び出しを行う
 
 > セッションID の採番のように「HTTP ではないがドメインの一部」の処理は handler 側で行い（`issueSession`）、その結果（Cookie に載せる値）を `HandlerResult.cookie` で route に返して route が Set-Cookie する。生成と Cookie 反映で層をまたぐ値は、handler が生成 → route が反映、の向きに統一する。
+
+## フロントエンド（Next.js / React）実装規約
+
+`Front/` の実装では以下を守る。`app/admin/accounts/` を基準実装として参照する。
+
+### 1コンポーネント＝1ファイル（page ファイルを肥大化させない）
+
+`page.tsx` に画面ロジックや子コンポーネントを全部書かない。`page.tsx` はレイアウト（`AuthenticatedLayout` 等）とコンテナの配線だけを行う薄いファイルにする。テーブル・ツールバー・ダイアログ・ページネーションなどの**子コンポーネントはそれぞれ別ファイルに切り出す**（`app/<screen>/components/*.tsx`）。型は `types.ts`、API 呼び出しは `api.ts` に分離する。
+
+- NG: `page.tsx` の中に `AccountsContent` / `DeleteConfirmDialog` などを全部定義して 400 行になる
+- OK:
+  - `app/admin/accounts/page.tsx` … `AuthenticatedLayout` + `<AccountsContent />` だけ
+  - `app/admin/accounts/components/accounts-content.tsx` … 状態管理・データ取得のコンテナ
+  - `app/admin/accounts/components/{se-admin-user-table,accounts-toolbar,pagination-controls,delete-confirm-dialog}.tsx` … 各プレゼンテーション
+  - `app/admin/accounts/types.ts` … 型定義、`app/admin/accounts/api.ts` … fetch 関数
+
+### `useState` にはジェネリクスを明示する
+
+`useState<T>(initial)` のように**必ず型引数を明示する**。初期値からの型推論に任せない（`useState('')` は `string`、`useState(0)` は `number` に推論されるが、明示する）。
+
+- NG: `const [page, setPage] = useState(1)` / `const [sort, setSort] = useState('createdAt:desc')`
+- OK: `const [page, setPage] = useState<number>(1)` / `const [sort, setSort] = useState<string>('createdAt:desc')`
+
+### データ取得は自前実装せず TanStack Query を使う
+
+`useEffect` + `fetch` + `useState` でローディング/エラー/データを手組みしない。**サーバ状態は `@tanstack/react-query` の `useQuery` / `useMutation` で扱う**。ローディング・エラー・キャッシュ・再取得は Query に任せる。`QueryClientProvider` は `app/providers.tsx`（`app/layout.tsx` で全体をラップ）で提供済み。
+
+- 一覧取得は `useQuery({ queryKey: ['se-admin-users', { page, sort, keyword }], queryFn })`。ページ切替時に前ページを保持したい場合は `placeholderData: (prev) => prev`
+- 更新系（削除・ロック解除）は `useMutation`。成功後は `queryClient.invalidateQueries({ queryKey: [...] })` で再取得する
+- NG: `useEffect(() => { fetch(...).then(setItems).catch(setError) }, [...])`
+- OK: `const { data, isLoading, isError } = useQuery({ queryKey, queryFn })`
+
+### 長い副作用を書かない・ロジックは関数に分ける
+
+`useEffect` の中に長い処理を直接書かない。副作用が必要なら短く保ち、**具体的な処理は名前付き関数に切り出す**。特に `fetch` の組み立ては `api.ts` の純粋関数（`fetchSeAdminUsers` / `deleteSeAdminUser` など、React 非依存でユニットテスト可能）に分離し、コンポーネントからはそれを呼ぶだけにする。TanStack Query 採用により、通常はデータ取得目的の `useEffect` は不要になる。
