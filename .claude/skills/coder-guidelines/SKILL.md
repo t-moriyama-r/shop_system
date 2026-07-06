@@ -67,8 +67,27 @@ Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` �
 - NG: `page.tsx` の中に `AccountsContent` / `DeleteConfirmDialog` などを全部定義して 400 行になる
 - OK:
   - `app/admin/accounts/page.tsx` … `AuthenticatedLayout` + `<AccountsContent />` だけ
-  - `app/admin/accounts/components/accounts-content.tsx` … 状態管理・データ取得のコンテナ
-  - `app/admin/accounts/components/{se-admin-user-table,accounts-toolbar,pagination-controls,delete-confirm-dialog}.tsx` … 各プレゼンテーション
+  - `app/admin/accounts/components/AccountsContent.tsx` … 状態管理・データ取得のコンテナ
+  - `app/admin/accounts/components/{SeAdminUserTable,AccountsToolbar,PaginationControls,DeleteConfirmDialog}.tsx` … 各プレゼンテーション
+
+**ただし、そのコンポーネント内に閉じている軽微な表示片（ローディング/エラー表示、テーブル本体の分岐、行など）は、同一ファイル内に名前付きコンポーネントとして定義してよい**。別ファイルに切り出すのは再利用され得る／独立した子コンポーネント。ファイル内に閉じるものでも**必ず名前を付けて意図を明確にする**（インラインの巨大な三項演算子や即時JSXの塊を避ける）。
+
+- NG: `SummaryPanel` の中で `{error ? <p/> : loading ? <p/> : <div>...</div>}` と分岐を全部インラインに書く
+- OK: 同一ファイル内に `SummaryBody` / `SummaryCards` / `SummaryFooter` のように名前付きで分割する
+
+### ファイル内の定義順序（コンポーネントを先頭に）
+
+コンポーネントファイルでは**コンポーネント（特に export する主コンポーネント）をファイルの先頭に置く**。ヘルパー関数・定数・型などの非コンポーネント定義は、コンポーネントの**後（ファイル下部）にまとめる**。関数宣言と型は巻き上げ（hoisting）されるため、下部に定義しても上部のコンポーネントから参照できる。
+
+- NG: `systemStatusLabel()` などのヘルパー関数や定数をファイル先頭に置き、コンポーネントを下に書く
+- OK: 先頭から `SummaryPanel` → 子コンポーネント群 → `// 以下、コンポーネント以外の定義` の区切り → 型 / 定数 / ヘルパー関数
+
+### Props は名前付き `type` で定義する（インライン注釈にしない）
+
+コンポーネントの props 型は**インラインのオブジェクト型注釈にせず、名前付きの `type`（`型名 Props`）として定義する**。
+
+- NG: `function SummaryPanel({ summary, loading }: { summary: DashboardSummary | undefined; loading: boolean }) {`
+- OK: `type SummaryPanelProps = { summary: DashboardSummary | undefined; loading: boolean }` を（ファイル下部の型定義に）置き、`function SummaryPanel({ summary, loading }: SummaryPanelProps) {` とする
 
 ### API 呼び出しは repository 層に置く（page/component 配下に書かない）
 
