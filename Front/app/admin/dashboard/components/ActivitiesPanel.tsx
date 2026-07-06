@@ -2,13 +2,15 @@
 
 import type { ActivityNotification, ShopAccountActivity } from '@/lib/repositories/dashboard'
 
-export function ActivitiesPanel({
-  activities,
-  loading,
-  error,
-  refreshing,
-  onRefresh,
-}: ActivitiesPanelProps) {
+type Props = {
+  activities: ShopAccountActivity[]
+  loading: boolean
+  error: string | null
+  refreshing: boolean
+  onRefresh: () => void
+}
+
+export function ActivitiesPanel({ activities, loading, error, refreshing, onRefresh }: Props) {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
@@ -45,6 +47,11 @@ export function ActivitiesPanel({
   )
 }
 
+type ActivitiesTableBodyProps = {
+  activities: ShopAccountActivity[]
+  loading: boolean
+}
+
 function ActivitiesTableBody({ activities, loading }: ActivitiesTableBodyProps) {
   if (loading) return <EmptyRow message="読み込み中..." />
   if (activities.length === 0) return <EmptyRow message="まだ顧客アカウントは発行されていません" />
@@ -55,6 +62,10 @@ function ActivitiesTableBody({ activities, loading }: ActivitiesTableBodyProps) 
       ))}
     </>
   )
+}
+
+type ActivityRowProps = {
+  activity: ShopAccountActivity
 }
 
 function ActivityRow({ activity }: ActivityRowProps) {
@@ -73,6 +84,10 @@ function ActivityRow({ activity }: ActivityRowProps) {
   )
 }
 
+type EmptyRowProps = {
+  message: string
+}
+
 function EmptyRow({ message }: EmptyRowProps) {
   return (
     <tr>
@@ -83,6 +98,10 @@ function EmptyRow({ message }: EmptyRowProps) {
   )
 }
 
+type AccountStatusBadgeProps = {
+  status: string
+}
+
 function AccountStatusBadge({ status }: AccountStatusBadgeProps) {
   const meta = ACCOUNT_STATUS[status] ?? { label: status, className: 'bg-gray-100 text-gray-700' }
   return (
@@ -90,6 +109,10 @@ function AccountStatusBadge({ status }: AccountStatusBadgeProps) {
       {meta.label}
     </span>
   )
+}
+
+type NotificationCellProps = {
+  notification: ActivityNotification | null
 }
 
 function NotificationCell({ notification }: NotificationCellProps) {
@@ -111,36 +134,7 @@ function NotificationCell({ notification }: NotificationCellProps) {
   )
 }
 
-// 以下、コンポーネント以外の定義（型・定数・ヘルパー）
-
-type ActivitiesPanelProps = {
-  activities: ShopAccountActivity[]
-  loading: boolean
-  error: string | null
-  refreshing: boolean
-  onRefresh: () => void
-}
-
-type ActivitiesTableBodyProps = {
-  activities: ShopAccountActivity[]
-  loading: boolean
-}
-
-type ActivityRowProps = {
-  activity: ShopAccountActivity
-}
-
-type EmptyRowProps = {
-  message: string
-}
-
-type AccountStatusBadgeProps = {
-  status: string
-}
-
-type NotificationCellProps = {
-  notification: ActivityNotification | null
-}
+// 以下、コンポーネント以外の定義（定数・ヘルパー）
 
 const ACCOUNT_STATUS: Record<string, { label: string; className: string }> = {
   active: { label: '有効', className: 'bg-green-100 text-green-700' },

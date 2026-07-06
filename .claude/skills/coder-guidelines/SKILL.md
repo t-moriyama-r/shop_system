@@ -77,17 +77,35 @@ Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` �
 
 ### ファイル内の定義順序（コンポーネントを先頭に）
 
-コンポーネントファイルでは**コンポーネント（特に export する主コンポーネント）をファイルの先頭に置く**。ヘルパー関数・定数・型などの非コンポーネント定義は、コンポーネントの**後（ファイル下部）にまとめる**。関数宣言と型は巻き上げ（hoisting）されるため、下部に定義しても上部のコンポーネントから参照できる。
+コンポーネントファイルでは**コンポーネント（特に export する主コンポーネント）をファイルの先頭に置く**。ヘルパー関数・定数・（Props 以外の）型などの非コンポーネント定義は、コンポーネントの**後（ファイル下部）にまとめる**。関数宣言と型は巻き上げ（hoisting）されるため、下部に定義しても上部のコンポーネントから参照できる。ただし後述のとおり **Props 型はその対応コンポーネントの直上に置く**（例外）。
 
 - NG: `systemStatusLabel()` などのヘルパー関数や定数をファイル先頭に置き、コンポーネントを下に書く
 - OK: 先頭から `SummaryPanel` → 子コンポーネント群 → `// 以下、コンポーネント以外の定義` の区切り → 型 / 定数 / ヘルパー関数
 
-### Props は名前付き `type` で定義する（インライン注釈にしない）
+### Props は名前付き `type` で、対応コンポーネントの直上に定義する
 
-コンポーネントの props 型は**インラインのオブジェクト型注釈にせず、名前付きの `type`（`型名 Props`）として定義する**。
+コンポーネントの props 型は**インラインのオブジェクト型注釈にせず、名前付きの `type` として、その対応するコンポーネントの直上に定義する**。
 
-- NG: `function SummaryPanel({ summary, loading }: { summary: DashboardSummary | undefined; loading: boolean }) {`
-- OK: `type SummaryPanelProps = { summary: DashboardSummary | undefined; loading: boolean }` を（ファイル下部の型定義に）置き、`function SummaryPanel({ summary, loading }: SummaryPanelProps) {` とする
+- **そのファイルのコア（主に export する）コンポーネントの Props 型名は `Props` でよい**（ファイル名＝コンポーネント名から自明なため冗長な接頭辞を付けない）
+- 同一ファイル内のサブコンポーネントは名前が衝突するため、`ActivityRowProps` のように `<コンポーネント名>Props` とする
+- 配置は各コンポーネントの**直上**（ファイル下部にまとめない）
+
+- NG: `function ActivitiesPanel({ activities }: { activities: ShopAccountActivity[]; loading: boolean }) {`（インライン注釈）
+- NG: コアコンポーネントに `ActivitiesPanelProps` のような冗長名を付ける
+- OK:
+  ```tsx
+  type Props = {
+    activities: ShopAccountActivity[]
+    loading: boolean
+    // ...
+  }
+
+  export function ActivitiesPanel({ activities, loading }: Props) { ... }
+
+  type ActivityRowProps = { activity: ShopAccountActivity }
+
+  function ActivityRow({ activity }: ActivityRowProps) { ... }
+  ```
 
 ### API 呼び出しは repository 層に置く（page/component 配下に書かない）
 

@@ -3,7 +3,13 @@
 import type { DashboardSummary } from '@/lib/repositories/dashboard'
 import { SummaryCard } from './SummaryCard'
 
-export function SummaryPanel({ summary, loading, error }: SummaryPanelProps) {
+type Props = {
+  summary: DashboardSummary | undefined
+  loading: boolean
+  error: string | null
+}
+
+export function SummaryPanel({ summary, loading, error }: Props) {
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h3 className="mb-4 text-lg font-semibold text-gray-700">システム稼働サマリー</h3>
@@ -12,7 +18,7 @@ export function SummaryPanel({ summary, loading, error }: SummaryPanelProps) {
   )
 }
 
-function SummaryBody({ summary, loading, error }: SummaryPanelProps) {
+function SummaryBody({ summary, loading, error }: Props) {
   if (error) return <p className="text-sm text-red-600">{error}</p>
   if (loading || !summary) return <p className="text-sm text-gray-400">読み込み中...</p>
   return (
@@ -21,6 +27,10 @@ function SummaryBody({ summary, loading, error }: SummaryPanelProps) {
       <SummaryFooter summary={summary} />
     </>
   )
+}
+
+type SummaryDataProps = {
+  summary: DashboardSummary
 }
 
 function SummaryCards({ summary }: SummaryDataProps) {
@@ -49,16 +59,6 @@ function SummaryFooter({ summary }: SummaryDataProps) {
 interface SystemStatus {
   label: string
   variant: 'success' | 'danger'
-}
-
-type SummaryPanelProps = {
-  summary: DashboardSummary | undefined
-  loading: boolean
-  error: string | null
-}
-
-type SummaryDataProps = {
-  summary: DashboardSummary
 }
 
 function systemStatusLabel(status: string): SystemStatus {
