@@ -1,5 +1,6 @@
 'use client'
 
+import { ErrorMessage } from '../../../components/ErrorMessage'
 import { CustomerAccountForm } from './CustomerAccountForm'
 import { useNewCustomer } from './useNewCustomer'
 
@@ -11,7 +12,11 @@ export function NewCustomerContent() {
       <h2 className="text-2xl font-bold text-gray-800">顧客アカウント発行</h2>
 
       <section className="max-w-2xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        {error && <div className="mb-5 rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {error && (
+          <div className="mb-5">
+            <ErrorMessage message={error} />
+          </div>
+        )}
         <CustomerAccountForm submitting={submitting} onSubmit={submit} />
       </section>
     </div>

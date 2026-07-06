@@ -1,25 +1,13 @@
 'use client'
 
-import { useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
-import {
-  shopAccountQuery,
-  type EmailNotificationLog,
-  type ShopAccountDetail,
-} from '@/lib/repositories/shop-accounts'
+import type { EmailNotificationLog, ShopAccountDetail } from '@/lib/repositories/shop-accounts'
+import { ErrorMessage } from '../../../components/ErrorMessage'
+import { LoadingIndicator } from '../../../components/LoadingIndicator'
+import { useCustomerComplete } from './useCustomerComplete'
 
 export function CustomerCompleteContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const shopAccountId = searchParams.get('shopAccountId') ?? ''
-
-  useEffect(() => {
-    if (!shopAccountId) router.replace('/admin/dashboard')
-  }, [shopAccountId, router])
-
-  const query = useQuery(shopAccountQuery(shopAccountId))
+  const { shopAccountId, account, loading, error } = useCustomerComplete()
 
   if (!shopAccountId) return null
 
@@ -28,11 +16,7 @@ export function CustomerCompleteContent() {
       <h2 className="text-2xl font-bold text-gray-800">顧客アカウント発行完了</h2>
 
       <section className="max-w-2xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <CompleteBody
-          account={query.data ?? null}
-          loading={query.isPending}
-          error={query.isError}
-        />
+        <CompleteBody account={account} loading={loading} error={error} />
       </section>
     </div>
   )
@@ -45,14 +29,8 @@ type CompleteBodyProps = {
 }
 
 function CompleteBody({ account, loading, error }: CompleteBodyProps) {
-  if (loading) return <p className="text-sm text-gray-500">読み込み中...</p>
-  if (error || !account) {
-    return (
-      <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-        顧客アカウント情報の取得に失敗しました
-      </p>
-    )
-  }
+  if (loading) return <LoadingIndicator />
+  if (error || !account) return <ErrorMessage message="顧客アカウント情報の取得に失敗しました" />
 
   return (
     <div className="space-y-6">
