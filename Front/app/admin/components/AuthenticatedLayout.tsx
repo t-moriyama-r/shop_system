@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { API_BASE_URL as API_BASE } from '@/lib/config'
 import { AdminHeader } from './AdminHeader'
 import { AdminSidebar } from './AdminSidebar'
+import { LoadingIndicator } from './LoadingIndicator'
 
 interface SessionUser {
   seAdminUserId: string
@@ -54,7 +55,7 @@ export function AuthenticatedLayout({ children }: { children: React.ReactNode })
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <div className="text-gray-500">読み込み中...</div>
+        <LoadingIndicator />
       </div>
     )
   }

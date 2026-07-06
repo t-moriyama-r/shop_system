@@ -1,6 +1,7 @@
 'use client'
 
 import type { SeAdminUser } from '@/lib/repositories/se-admin-users'
+import { LoadingIndicator } from '../../components/LoadingIndicator'
 
 type Props = {
   items: SeAdminUser[]
@@ -48,7 +49,7 @@ export function SeAdminUserTable({
 }
 
 function TableBody({ items, loading, currentUserId, actionLoading, onUnlock, onRequestDelete }: Props) {
-  if (loading) return <EmptyRow message="読み込み中..." />
+  if (loading) return <EmptyRow message={<LoadingIndicator />} />
   if (items.length === 0) return <EmptyRow message="該当するSE管理者アカウントはありません" />
   return (
     <>
@@ -67,7 +68,7 @@ function TableBody({ items, loading, currentUserId, actionLoading, onUnlock, onR
 }
 
 type EmptyRowProps = {
-  message: string
+  message: React.ReactNode
 }
 
 function EmptyRow({ message }: EmptyRowProps) {

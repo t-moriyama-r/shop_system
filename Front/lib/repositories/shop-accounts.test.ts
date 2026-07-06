@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { createShopAccount } from './shop-accounts'
+import { createShopAccount, fetchShopAccount } from './shop-accounts'
 
 const input = { shopName: 'サンプル商店', contactName: '山田 太郎', email: 'owner@example.com' }
 
@@ -36,5 +36,39 @@ describe('createShopAccount', () => {
     )
 
     await expect(createShopAccount(input)).rejects.toThrow('このメールアドレスは既に登録されています')
+  })
+})
+
+describe('fetchShopAccount', () => {
+  it('GETs the account with its email notification logs', async () => {
+    const account = {
+      shopAccountId: 'a1',
+      ...input,
+      accountStatus: 'active',
+      emailNotificationLogs: [{ emailNotificationLogId: 'log-1', sendStatus: 'SUCCESS' }],
+    }
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => account })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await fetchShopAccount('a1')
+
+    expect(result).toEqual(account)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toContain('/api/shop-accounts/a1')
+    expect(init.credentials).toBe('include')
+  })
+
+  it('throws the server-provided error message on failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: '対象のショップアカウントが見つかりません' }),
+      }),
+    )
+
+    await expect(fetchShopAccount('missing')).rejects.toThrow(
+      '対象のショップアカウントが見つかりません',
+    )
   })
 })

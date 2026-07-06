@@ -10,6 +10,7 @@ import {
   type SeAdminUser,
 } from '@/lib/repositories/se-admin-users'
 import { currentUserQuery } from '@/lib/repositories/session'
+import { ErrorMessage } from '../../components/ErrorMessage'
 import { AccountsToolbar } from './AccountsToolbar'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
 import { PaginationControls } from './PaginationControls'
@@ -90,9 +91,7 @@ export function AccountsContent() {
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800">SE管理者アカウント</h2>
 
-      {errorMessage && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{errorMessage}</div>
-      )}
+      {errorMessage && <ErrorMessage message={errorMessage} />}
       {actionMessage && (
         <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">{actionMessage}</div>
       )}
