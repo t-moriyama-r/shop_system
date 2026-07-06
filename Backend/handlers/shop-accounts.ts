@@ -15,6 +15,7 @@ import {
 } from 'db/shop-accounts'
 import { recordAuditLog } from '../lib/audit-log'
 import { sendShopAccountIssuedNotification } from '../lib/email/notify'
+import { buildPagination, parsePositiveInt } from '../lib/pagination'
 import type { AuthUser } from '../middleware/auth'
 import type { ClientMeta, HandlerResult } from './types'
 
@@ -42,14 +43,6 @@ function triggerShopAccountIssuedNotification(
   void sendShopAccountIssuedNotification(params).catch((err) => {
     console.error('通知メールの送信処理でエラーが発生しました', err)
   })
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number, max?: number): number {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback
-  }
-  return max ? Math.min(parsed, max) : parsed
 }
 
 const STATUS_ERROR = `status は ${SHOP_ACCOUNT_STATUSES.join(' / ')} のいずれかで指定してください`
@@ -87,7 +80,7 @@ export async function listShopAccountsHandler(input: ListShopAccountsInput): Pro
     status: 200,
     body: {
       data: rows,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      pagination: buildPagination(page, limit, total),
     },
   }
 }
@@ -262,7 +255,7 @@ export async function listNotificationLogsHandler(
     status: 200,
     body: {
       data: rows,
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      pagination: buildPagination(page, limit, total),
     },
   }
 }

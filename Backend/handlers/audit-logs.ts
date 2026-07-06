@@ -1,4 +1,5 @@
 import { listAuditLogs } from 'db/audit-logs'
+import { buildPagination, parsePositiveInt } from '../lib/pagination'
 import type { HandlerResult } from './types'
 
 const DEFAULT_PAGE = 1
@@ -6,14 +7,6 @@ const DEFAULT_LIMIT = 50
 const MAX_LIMIT = 100
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-function parsePositiveInt(value: string | undefined, fallback: number, max?: number): number {
-  const parsed = Number.parseInt(value ?? '', 10)
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback
-  }
-  return max ? Math.min(parsed, max) : parsed
-}
 
 export interface ListAuditLogsInput {
   page?: string
@@ -78,12 +71,7 @@ export async function listAuditLogsHandler(input: ListAuditLogsInput): Promise<H
     status: 200,
     body: {
       data: rows,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: buildPagination(page, limit, total),
     },
   }
 }
