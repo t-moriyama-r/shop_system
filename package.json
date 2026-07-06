@@ -16,6 +16,7 @@
     "db:cleanup-audit-logs": "pnpm --filter db cleanup-audit-logs",
     "db:create-se-admin": "pnpm --filter db create-se-admin",
     "db:delete-se-admin": "pnpm --filter db delete-se-admin",
+    "backend:retry-failed-notifications": "pnpm --filter backend retry-failed-notifications",
     "test": "pnpm -r test"
   }
 }

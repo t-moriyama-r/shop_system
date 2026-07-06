@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, lt, or, sql, type SQL } from 'drizzle-orm'
 
 import { db } from './client'
 import { emailNotificationLogs, shopAccounts } from './schema'
@@ -333,4 +333,101 @@ export async function updateShopAccountStatus(
     .update(shopAccounts)
     .set({ accountStatus: status, updatedAt: now })
     .where(eq(shopAccounts.shopAccountId, shopAccountId))
+}
+
+// ---------------------------------------------------------------------------
+// メール送信失敗レコード再送バッチ（BP-005/BP-011 BATCH、別Issue）向けの機能。
+// ---------------------------------------------------------------------------
+
+/** 自動再送を諦めるまでの最大試行回数（初回送信含まず、失敗からの再送回数）。 */
+export const EMAIL_NOTIFICATION_MAX_RETRY_COUNT = 5
+
+const EMAIL_NOTIFICATION_RETRY_BASE_MINUTES = 5
+const EMAIL_NOTIFICATION_RETRY_MAX_MINUTES = 24 * 60
+
+/**
+ * 再試行回数に応じたバックオフ時間（ミリ秒）を返す。5分を基準に retryCount 回
+ * ごとに倍化する指数バックオフとし、24時間を上限とする。
+ */
+export function emailNotificationRetryBackoffMs(retryCount: number): number {
+  const minutes = Math.min(
+    EMAIL_NOTIFICATION_RETRY_BASE_MINUTES * 2 ** retryCount,
+    EMAIL_NOTIFICATION_RETRY_MAX_MINUTES,
+  )
+  return minutes * 60 * 1000
+}
+
+export interface EmailNotificationRetryCandidate {
+  emailNotificationLogId: string
+  shopAccountId: string
+  toEmail: string
+  shopName: string
+  contactName: string
+  notificationType: string
+  retryCount: number
+}
+
+/**
+ * 再送バッチの対象（送信失敗かつ再試行回数上限未満、バックオフ経過済み）を抽出する。
+ * 論理削除済みのショップアカウントは対象外とする。
+ */
+export async function findEmailNotificationRetryCandidates(
+  now: Date = new Date(),
+): Promise<EmailNotificationRetryCandidate[]> {
+  const rows = await db
+    .select({
+      emailNotificationLogId: emailNotificationLogs.emailNotificationLogId,
+      shopAccountId: emailNotificationLogs.shopAccountId,
+      toEmail: emailNotificationLogs.toEmail,
+      notificationType: emailNotificationLogs.notificationType,
+      retryCount: emailNotificationLogs.retryCount,
+      updatedAt: emailNotificationLogs.updatedAt,
+      shopName: shopAccounts.shopName,
+      contactName: shopAccounts.contactName,
+    })
+    .from(emailNotificationLogs)
+    .innerJoin(shopAccounts, eq(emailNotificationLogs.shopAccountId, shopAccounts.shopAccountId))
+    .where(
+      and(
+        eq(emailNotificationLogs.sendStatus, 'FAILURE'),
+        lt(emailNotificationLogs.retryCount, EMAIL_NOTIFICATION_MAX_RETRY_COUNT),
+        eq(shopAccounts.isDeleted, false),
+      ),
+    )
+
+  return rows
+    .filter(
+      (row) => now.getTime() - row.updatedAt.getTime() >= emailNotificationRetryBackoffMs(row.retryCount),
+    )
+    .map(({ updatedAt: _updatedAt, ...candidate }) => candidate)
+}
+
+export interface MarkEmailNotificationForRetryInput {
+  emailNotificationLogId: string
+  shopAccountId: string
+  initialPasswordHash: string
+  now?: Date
+}
+
+/**
+ * 再送対象の通知ログを再送信可能な状態に戻す。一時パスワードは平文を保持しないため
+ * 再発行し、`shop_accounts.initial_password_hash` を更新した上で対象ログを PENDING に戻す
+ * （retryCount は据え置き、送信結果は recordEmailNotificationResult が反映する）。
+ */
+export async function markEmailNotificationForRetry(
+  input: MarkEmailNotificationForRetryInput,
+): Promise<void> {
+  const now = input.now ?? new Date()
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(shopAccounts)
+      .set({ initialPasswordHash: input.initialPasswordHash, updatedAt: now })
+      .where(eq(shopAccounts.shopAccountId, input.shopAccountId))
+
+    await tx
+      .update(emailNotificationLogs)
+      .set({ sendStatus: 'PENDING', updatedAt: now })
+      .where(eq(emailNotificationLogs.emailNotificationLogId, input.emailNotificationLogId))
+  })
 }
