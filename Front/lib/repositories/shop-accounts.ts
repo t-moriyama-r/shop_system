@@ -1,3 +1,4 @@
+import { queryOptions } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/config'
 
 export interface ShopAccount {
@@ -12,6 +13,23 @@ export interface ShopAccount {
   deletedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface EmailNotificationLog {
+  emailNotificationLogId: string
+  shopAccountId: string
+  toEmail: string
+  notificationType: string
+  sendStatus: string
+  sentAt: string | null
+  errorMessage: string | null
+  retryCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ShopAccountDetail extends ShopAccount {
+  emailNotificationLogs: EmailNotificationLog[]
 }
 
 export interface CreateShopAccountInput {
@@ -41,4 +59,31 @@ export async function createShopAccount(
   })
   if (!res.ok) throw new Error(await readErrorMessage(res, '顧客アカウントの発行に失敗しました'))
   return res.json()
+}
+
+export async function fetchShopAccount(shopAccountId: string): Promise<ShopAccountDetail> {
+  const res = await fetch(`${API_BASE_URL}/api/shop-accounts/${shopAccountId}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await readErrorMessage(res, '顧客アカウント情報の取得に失敗しました'))
+  return res.json()
+}
+
+const NOTIFICATION_POLL_INTERVAL_MS = 3000
+
+export const shopAccountKeys = {
+  all: ['shop-accounts'] as const,
+  detail: (shopAccountId: string) => [...shopAccountKeys.all, shopAccountId] as const,
+}
+
+export function shopAccountQuery(shopAccountId: string) {
+  return queryOptions({
+    queryKey: shopAccountKeys.detail(shopAccountId),
+    queryFn: () => fetchShopAccount(shopAccountId),
+    enabled: shopAccountId.length > 0,
+    refetchInterval: (query) => {
+      const latestLog = query.state.data?.emailNotificationLogs[0]
+      return latestLog?.sendStatus === 'PENDING' ? NOTIFICATION_POLL_INTERVAL_MS : false
+    },
+  })
 }
