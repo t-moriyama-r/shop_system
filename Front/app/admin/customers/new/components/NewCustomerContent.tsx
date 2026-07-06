@@ -7,14 +7,10 @@ import {
   type CreateShopAccountInput,
   type ShopAccount,
 } from '@/lib/repositories/shop-accounts'
-import { CustomerAccountForm, validateCustomerForm, type CustomerFormErrors } from './CustomerAccountForm'
+import { CustomerAccountForm, type CustomerFormValues } from './CustomerAccountForm'
 import { IssueCompletePanel } from './IssueCompletePanel'
 
-const EMPTY_FORM: CreateShopAccountInput = { shopName: '', contactName: '', email: '' }
-
 export function NewCustomerContent() {
-  const [values, setValues] = useState<CreateShopAccountInput>(EMPTY_FORM)
-  const [errors, setErrors] = useState<CustomerFormErrors>({})
   const [created, setCreated] = useState<ShopAccount | null>(null)
 
   const createMutation = useMutation({
@@ -22,29 +18,10 @@ export function NewCustomerContent() {
     onSuccess: (data) => setCreated(data.shopAccount),
   })
 
-  const handleChange = (field: keyof CreateShopAccountInput, value: string) => {
-    setValues((prev) => ({ ...prev, [field]: value }))
-    // 入力中に該当フィールドのエラーを消し、リアルタイムに解消状態を反映する。
-    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
-  }
-
-  const handleSubmit = () => {
-    const validationErrors = validateCustomerForm(values)
-    if (Object.values(validationErrors).some(Boolean)) {
-      setErrors(validationErrors)
-      return
-    }
-    setErrors({})
-    createMutation.mutate({
-      shopName: values.shopName.trim(),
-      contactName: values.contactName.trim(),
-      email: values.email.trim(),
-    })
-  }
+  // customerFormSchema により trim 済みの値が渡るため、そのまま API 入力に用いる。
+  const handleSubmit = (values: CustomerFormValues) => createMutation.mutate(values)
 
   const handleIssueAnother = () => {
-    setValues(EMPTY_FORM)
-    setErrors({})
     setCreated(null)
     createMutation.reset()
   }
@@ -63,13 +40,7 @@ export function NewCustomerContent() {
                 {createMutation.error.message}
               </div>
             )}
-            <CustomerAccountForm
-              values={values}
-              errors={errors}
-              submitting={createMutation.isPending}
-              onChange={handleChange}
-              onSubmit={handleSubmit}
-            />
+            <CustomerAccountForm submitting={createMutation.isPending} onSubmit={handleSubmit} />
           </>
         )}
       </section>

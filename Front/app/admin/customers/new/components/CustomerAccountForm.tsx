@@ -1,32 +1,33 @@
 'use client'
 
-import type { CreateShopAccountInput } from '@/lib/repositories/shop-accounts'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm, type UseFormRegisterReturn } from 'react-hook-form'
+import { z } from 'zod'
 
 type Props = {
-  values: CreateShopAccountInput
-  errors: CustomerFormErrors
   submitting: boolean
-  onChange: (field: keyof CreateShopAccountInput, value: string) => void
-  onSubmit: () => void
+  onSubmit: (values: CustomerFormValues) => void
 }
 
-export function CustomerAccountForm({ values, errors, submitting, onChange, onSubmit }: Props) {
+export function CustomerAccountForm({ submitting, onSubmit }: Props) {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<CustomerFormValues>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: { shopName: '', contactName: '', email: '' },
+    mode: 'onBlur',
+  })
+
   return (
-    <form
-      className="space-y-5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSubmit()
-      }}
-      noValidate
-    >
+    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)} noValidate>
       {FIELDS.map((field) => (
         <FormField
           key={field.name}
           field={field}
-          value={values[field.name]}
-          error={errors[field.name]}
-          onChange={(value) => onChange(field.name, value)}
+          registration={register(field.name)}
+          error={errors[field.name]?.message}
         />
       ))}
 
@@ -45,12 +46,11 @@ export function CustomerAccountForm({ values, errors, submitting, onChange, onSu
 
 type FormFieldProps = {
   field: FieldDef
-  value: string
+  registration: UseFormRegisterReturn
   error?: string
-  onChange: (value: string) => void
 }
 
-function FormField({ field, value, error, onChange }: FormFieldProps) {
+function FormField({ field, registration, error }: FormFieldProps) {
   const inputId = `customer-${field.name}`
   return (
     <div>
@@ -61,8 +61,6 @@ function FormField({ field, value, error, onChange }: FormFieldProps) {
       <input
         id={inputId}
         type={field.type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
         placeholder={field.placeholder}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? `${inputId}-error` : undefined}
@@ -71,6 +69,7 @@ function FormField({ field, value, error, onChange }: FormFieldProps) {
             ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
             : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
         }`}
+        {...registration}
       />
       {error && (
         <p id={`${inputId}-error`} className="mt-1 text-sm text-red-600">
@@ -81,10 +80,34 @@ function FormField({ field, value, error, onChange }: FormFieldProps) {
   )
 }
 
-export type CustomerFormErrors = Partial<Record<keyof CreateShopAccountInput, string>>
+const MAX_FIELD_LENGTH = 255
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// サーバ（Backend/handlers/shop-accounts.ts）と同じ基準でクライアント側も検証する。
+// trim 済みの値がそのまま onSubmit に渡るため、送信前の整形も本スキーマに集約する。
+export const customerFormSchema = z.object({
+  shopName: z
+    .string()
+    .trim()
+    .min(1, 'ショップ名は必須です')
+    .max(MAX_FIELD_LENGTH, `ショップ名は${MAX_FIELD_LENGTH}文字以内で指定してください`),
+  contactName: z
+    .string()
+    .trim()
+    .min(1, '担当者名は必須です')
+    .max(MAX_FIELD_LENGTH, `担当者名は${MAX_FIELD_LENGTH}文字以内で指定してください`),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'メールアドレスは必須です')
+    .max(MAX_FIELD_LENGTH, `メールアドレスは${MAX_FIELD_LENGTH}文字以内で指定してください`)
+    .regex(EMAIL_PATTERN, 'メールアドレスの形式が正しくありません'),
+})
+
+export type CustomerFormValues = z.infer<typeof customerFormSchema>
 
 type FieldDef = {
-  name: keyof CreateShopAccountInput
+  name: keyof CustomerFormValues
   label: string
   type: 'text' | 'email'
   placeholder: string
@@ -95,30 +118,3 @@ const FIELDS: FieldDef[] = [
   { name: 'contactName', label: '担当者名', type: 'text', placeholder: '例）山田 太郎' },
   { name: 'email', label: 'メールアドレス', type: 'email', placeholder: '例）owner@example.com' },
 ]
-
-const MAX_FIELD_LENGTH = 255
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-// サーバ（Backend/handlers/shop-accounts.ts）と同じ基準でクライアント側でも検証し、
-// バリデーションエラーをインライン表示する。戻り値が空なら妥当。
-export function validateCustomerForm(values: CreateShopAccountInput): CustomerFormErrors {
-  const errors: CustomerFormErrors = {}
-
-  const shopName = values.shopName.trim()
-  if (!shopName) errors.shopName = 'ショップ名は必須です'
-  else if (shopName.length > MAX_FIELD_LENGTH)
-    errors.shopName = `ショップ名は${MAX_FIELD_LENGTH}文字以内で指定してください`
-
-  const contactName = values.contactName.trim()
-  if (!contactName) errors.contactName = '担当者名は必須です'
-  else if (contactName.length > MAX_FIELD_LENGTH)
-    errors.contactName = `担当者名は${MAX_FIELD_LENGTH}文字以内で指定してください`
-
-  const email = values.email.trim()
-  if (!email) errors.email = 'メールアドレスは必須です'
-  else if (email.length > MAX_FIELD_LENGTH)
-    errors.email = `メールアドレスは${MAX_FIELD_LENGTH}文字以内で指定してください`
-  else if (!EMAIL_PATTERN.test(email)) errors.email = 'メールアドレスの形式が正しくありません'
-
-  return errors
-}
