@@ -1,12 +1,15 @@
 import bcrypt from 'bcrypt'
 import crypto from 'node:crypto'
 import {
+  createResendEmailNotificationLog,
   createShopAccount,
   findShopAccountByEmail,
   findShopAccountById,
   isShopAccountStatus,
   listEmailLogsByShopAccount,
+  listEmailNotificationLogsPage,
   listShopAccounts,
+  SHOP_ACCOUNT_ISSUED_NOTIFICATION,
   SHOP_ACCOUNT_STATUSES,
   updateShopAccountStatus,
 } from 'db/shop-accounts'
@@ -204,5 +207,82 @@ export async function updateShopAccountStatusHandler(
   return {
     status: 200,
     body: { message: 'ショップアカウントのステータスを更新しました', accountStatus: status },
+  }
+}
+
+export interface ListNotificationLogsInput {
+  shopAccountId: string
+  page?: string
+  limit?: string
+}
+
+export async function listNotificationLogsHandler(
+  input: ListNotificationLogsInput,
+): Promise<HandlerResult> {
+  if (!UUID_PATTERN.test(input.shopAccountId)) {
+    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
+  }
+
+  const account = await findShopAccountById(input.shopAccountId)
+  if (!account) {
+    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+  }
+
+  const page = parsePositiveInt(input.page, DEFAULT_PAGE)
+  const limit = parsePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT)
+
+  const { rows, total } = await listEmailNotificationLogsPage({
+    shopAccountId: input.shopAccountId,
+    page,
+    limit,
+  })
+
+  return {
+    status: 200,
+    body: {
+      data: rows,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    },
+  }
+}
+
+export interface ResendNotificationInput {
+  shopAccountId: string
+  operator: AuthUser
+  meta: ClientMeta
+}
+
+export async function resendNotificationHandler(
+  input: ResendNotificationInput,
+): Promise<HandlerResult> {
+  if (!UUID_PATTERN.test(input.shopAccountId)) {
+    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
+  }
+
+  const account = await findShopAccountById(input.shopAccountId)
+  if (!account) {
+    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+  }
+
+  const log = await createResendEmailNotificationLog({
+    shopAccountId: input.shopAccountId,
+    toEmail: account.email,
+    notificationType: SHOP_ACCOUNT_ISSUED_NOTIFICATION,
+  })
+
+  await recordAuditLog({
+    operatorType: 'se_admin',
+    seAdminUserId: input.operator.seAdminUserId,
+    actionType: 'SHOP_ACCOUNT_NOTIFICATION_RESEND',
+    targetType: 'shop_account',
+    targetId: input.shopAccountId,
+    result: 'SUCCESS',
+    detail: `ショップアカウント(${account.email})の通知メール再送信をトリガー`,
+    ...input.meta,
+  })
+
+  return {
+    status: 200,
+    body: { message: '通知メールの再送信をトリガーしました', emailNotificationLog: log },
   }
 }

@@ -5,18 +5,23 @@ const findShopAccountById = vi.fn()
 const findShopAccountByEmail = vi.fn()
 const createShopAccount = vi.fn()
 const listEmailLogsByShopAccount = vi.fn()
+const listEmailNotificationLogsPage = vi.fn()
+const createResendEmailNotificationLog = vi.fn()
 const updateShopAccountStatus = vi.fn()
 
 vi.mock('db/shop-accounts', async () => {
   const statuses = ['active', 'pending', 'suspended'] as const
   return {
     SHOP_ACCOUNT_STATUSES: statuses,
+    SHOP_ACCOUNT_ISSUED_NOTIFICATION: 'SHOP_ACCOUNT_ISSUED',
     isShopAccountStatus: (v: string) => (statuses as readonly string[]).includes(v),
     listShopAccounts: (...a: unknown[]) => listShopAccounts(...a),
     findShopAccountById: (...a: unknown[]) => findShopAccountById(...a),
     findShopAccountByEmail: (...a: unknown[]) => findShopAccountByEmail(...a),
     createShopAccount: (...a: unknown[]) => createShopAccount(...a),
     listEmailLogsByShopAccount: (...a: unknown[]) => listEmailLogsByShopAccount(...a),
+    listEmailNotificationLogsPage: (...a: unknown[]) => listEmailNotificationLogsPage(...a),
+    createResendEmailNotificationLog: (...a: unknown[]) => createResendEmailNotificationLog(...a),
     updateShopAccountStatus: (...a: unknown[]) => updateShopAccountStatus(...a),
   }
 })
@@ -29,6 +34,8 @@ const {
   getShopAccountHandler,
   updateShopAccountStatusHandler,
   createShopAccountHandler,
+  listNotificationLogsHandler,
+  resendNotificationHandler,
 } = await import('./shop-accounts')
 
 const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000'
@@ -39,6 +46,11 @@ beforeEach(() => {
   vi.clearAllMocks()
   listShopAccounts.mockResolvedValue({ rows: [], total: 0 })
   listEmailLogsByShopAccount.mockResolvedValue([])
+  listEmailNotificationLogsPage.mockResolvedValue({ rows: [], total: 0 })
+  createResendEmailNotificationLog.mockResolvedValue({
+    emailNotificationLogId: 'log-1',
+    sendStatus: 'PENDING',
+  })
   updateShopAccountStatus.mockResolvedValue(undefined)
   findShopAccountByEmail.mockResolvedValue(undefined)
   createShopAccount.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'shop@example.com' })
@@ -236,6 +248,79 @@ describe('updateShopAccountStatusHandler', () => {
     expect(recordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actionType: 'SHOP_ACCOUNT_STATUS_UPDATE',
+        targetType: 'shop_account',
+        targetId: VALID_UUID,
+        result: 'SUCCESS',
+      }),
+    )
+  })
+})
+
+describe('listNotificationLogsHandler', () => {
+  it('rejects a non-UUID id with 400', async () => {
+    const r = await listNotificationLogsHandler({ shopAccountId: 'not-a-uuid' })
+    expect(r.status).toBe(400)
+    expect(findShopAccountById).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 when the account does not exist', async () => {
+    findShopAccountById.mockResolvedValue(undefined)
+    const r = await listNotificationLogsHandler({ shopAccountId: VALID_UUID })
+    expect(r.status).toBe(404)
+    expect(listEmailNotificationLogsPage).not.toHaveBeenCalled()
+  })
+
+  it('returns rows with pagination metadata (default limit 20)', async () => {
+    findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
+    listEmailNotificationLogsPage.mockResolvedValue({
+      rows: [{ emailNotificationLogId: 'e1' }],
+      total: 45,
+    })
+    const r = await listNotificationLogsHandler({ shopAccountId: VALID_UUID })
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({
+      data: [{ emailNotificationLogId: 'e1' }],
+      pagination: { page: 1, limit: 20, total: 45, totalPages: 3 },
+    })
+    expect(listEmailNotificationLogsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ shopAccountId: VALID_UUID, page: 1, limit: 20 }),
+    )
+  })
+
+  it('caps limit at the maximum (100)', async () => {
+    findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
+    const r = await listNotificationLogsHandler({ shopAccountId: VALID_UUID, limit: '500' })
+    expect(r.body).toMatchObject({ pagination: { limit: 100 } })
+  })
+})
+
+describe('resendNotificationHandler', () => {
+  it('rejects a non-UUID id with 400', async () => {
+    const r = await resendNotificationHandler({ shopAccountId: 'bad', operator, meta })
+    expect(r.status).toBe(400)
+    expect(findShopAccountById).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 when the account does not exist', async () => {
+    findShopAccountById.mockResolvedValue(undefined)
+    const r = await resendNotificationHandler({ shopAccountId: VALID_UUID, operator, meta })
+    expect(r.status).toBe(404)
+    expect(createResendEmailNotificationLog).not.toHaveBeenCalled()
+  })
+
+  it('creates a new PENDING log and records an audit log', async () => {
+    findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
+    const r = await resendNotificationHandler({ shopAccountId: VALID_UUID, operator, meta })
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ emailNotificationLog: { emailNotificationLogId: 'log-1' } })
+    expect(createResendEmailNotificationLog).toHaveBeenCalledWith({
+      shopAccountId: VALID_UUID,
+      toEmail: 'a@example.com',
+      notificationType: 'SHOP_ACCOUNT_ISSUED',
+    })
+    expect(recordAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionType: 'SHOP_ACCOUNT_NOTIFICATION_RESEND',
         targetType: 'shop_account',
         targetId: VALID_UUID,
         result: 'SUCCESS',

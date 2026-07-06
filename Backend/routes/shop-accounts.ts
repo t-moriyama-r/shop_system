@@ -3,7 +3,9 @@ import { authMiddleware, type AuthUser } from '../middleware/auth'
 import {
   createShopAccountHandler,
   getShopAccountHandler,
+  listNotificationLogsHandler,
   listShopAccountsHandler,
+  resendNotificationHandler,
   updateShopAccountStatusHandler,
 } from '../handlers/shop-accounts'
 import { clientMeta } from '../lib/http'
@@ -55,6 +57,26 @@ shopAccountsRoute.patch('/:shopAccountId/status', async (c) => {
     shopAccountId: c.req.param('shopAccountId'),
     operator: c.get('user'),
     status: body.status,
+    meta: clientMeta(c),
+  })
+  return c.json(result.body, result.status)
+})
+
+// GET /api/shop-accounts/:shopAccountId/notification-logs
+shopAccountsRoute.get('/:shopAccountId/notification-logs', async (c) => {
+  const result = await listNotificationLogsHandler({
+    shopAccountId: c.req.param('shopAccountId'),
+    page: c.req.query('page'),
+    limit: c.req.query('limit'),
+  })
+  return c.json(result.body, result.status)
+})
+
+// POST /api/shop-accounts/:shopAccountId/notification/resend
+shopAccountsRoute.post('/:shopAccountId/notification/resend', async (c) => {
+  const result = await resendNotificationHandler({
+    shopAccountId: c.req.param('shopAccountId'),
+    operator: c.get('user'),
     meta: clientMeta(c),
   })
   return c.json(result.body, result.status)

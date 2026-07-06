@@ -52,6 +52,8 @@ const {
   findShopAccountByEmail,
   createShopAccount,
   listEmailLogsByShopAccount,
+  listEmailNotificationLogsPage,
+  createResendEmailNotificationLog,
   updateShopAccountStatus,
   isShopAccountStatus,
   SHOP_ACCOUNT_STATUSES,
@@ -148,6 +150,37 @@ describe('listEmailLogsByShopAccount', () => {
     const logs = [{ emailNotificationLogId: 'e1', sendStatus: 'SENT' }]
     h.state.selectQueue = [logs]
     expect(await listEmailLogsByShopAccount('s1')).toEqual(logs)
+  })
+})
+
+describe('listEmailNotificationLogsPage', () => {
+  it('returns rows and total from two queries', async () => {
+    const rows = [{ emailNotificationLogId: 'e1', sendStatus: 'PENDING' }]
+    h.state.selectQueue = [rows, [{ value: 3 }]]
+    const result = await listEmailNotificationLogsPage({ shopAccountId: 's1', page: 1, limit: 20 })
+    expect(result.rows).toEqual(rows)
+    expect(result.total).toBe(3)
+  })
+})
+
+describe('createResendEmailNotificationLog', () => {
+  it('inserts a new PENDING email notification log', async () => {
+    h.state.returningQueue = [[{ emailNotificationLogId: 'e2', sendStatus: 'PENDING' }]]
+
+    const result = await createResendEmailNotificationLog({
+      shopAccountId: 's1',
+      toEmail: 'a@example.com',
+      notificationType: 'SHOP_ACCOUNT_ISSUED',
+    })
+
+    expect(result).toMatchObject({ emailNotificationLogId: 'e2' })
+    expect(h.state.insertTables).toEqual([emailNotificationLogs])
+    expect(h.state.insertValues[0]).toMatchObject({
+      shopAccountId: 's1',
+      toEmail: 'a@example.com',
+      notificationType: 'SHOP_ACCOUNT_ISSUED',
+      sendStatus: 'PENDING',
+    })
   })
 })
 
