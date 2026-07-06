@@ -2,17 +2,14 @@
 
 import type { Pagination } from '@/lib/repositories/se-admin-users'
 
-export function PaginationControls({
-  pagination,
-  loading,
-  onPrev,
-  onNext,
-}: {
+type Props = {
   pagination: Pagination
   loading: boolean
   onPrev: () => void
   onNext: () => void
-}) {
+}
+
+export function PaginationControls({ pagination, loading, onPrev, onNext }: Props) {
   return (
     <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
       <span>

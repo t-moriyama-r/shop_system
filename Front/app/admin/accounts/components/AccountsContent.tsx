@@ -4,11 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
   deleteSeAdminUser,
-  fetchSeAdminUsers,
+  seAdminUsersKeys,
+  seAdminUsersListQuery,
   unlockSeAdminUser,
   type SeAdminUser,
 } from '@/lib/repositories/se-admin-users'
-import { fetchCurrentUser } from '@/lib/repositories/session'
+import { currentUserQuery } from '@/lib/repositories/session'
 import { AccountsToolbar } from './AccountsToolbar'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
 import { PaginationControls } from './PaginationControls'
@@ -24,16 +25,12 @@ export function AccountsContent() {
   const [deleteTarget, setDeleteTarget] = useState<SeAdminUser | null>(null)
   const [actionMessage, setActionMessage] = useState<string>('')
 
-  const sessionQuery = useQuery({ queryKey: ['session'], queryFn: fetchCurrentUser })
+  const sessionQuery = useQuery(currentUserQuery())
 
-  const listQuery = useQuery({
-    queryKey: ['se-admin-users', { page, sort, keyword }],
-    queryFn: () => fetchSeAdminUsers({ page, sort, keyword }),
-    placeholderData: (previous) => previous,
-  })
+  const listQuery = useQuery(seAdminUsersListQuery({ page, sort, keyword }))
 
   const invalidateList = () =>
-    queryClient.invalidateQueries({ queryKey: ['se-admin-users'] })
+    queryClient.invalidateQueries({ queryKey: seAdminUsersKeys.all })
 
   const unlockMutation = useMutation({
     mutationFn: (user: SeAdminUser) => unlockSeAdminUser(user.seAdminUserId),

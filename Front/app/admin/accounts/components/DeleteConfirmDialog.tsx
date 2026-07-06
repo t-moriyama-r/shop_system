@@ -1,16 +1,13 @@
 'use client'
 
-export function DeleteConfirmDialog({
-  email,
-  loading,
-  onCancel,
-  onConfirm,
-}: {
+type Props = {
   email: string
   loading: boolean
   onCancel: () => void
   onConfirm: () => void
-}) {
+}
+
+export function DeleteConfirmDialog({ email, loading, onCancel, onConfirm }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-lg">

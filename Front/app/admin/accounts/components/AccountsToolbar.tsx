@@ -1,12 +1,12 @@
 'use client'
 
-const SORT_OPTIONS = [
-  { value: 'createdAt:desc', label: '作成日時（新しい順）' },
-  { value: 'createdAt:asc', label: '作成日時（古い順）' },
-  { value: 'email:asc', label: 'メールアドレス（昇順）' },
-  { value: 'email:desc', label: 'メールアドレス（降順）' },
-  { value: 'lastLoginAt:desc', label: '最終ログイン（新しい順）' },
-]
+type Props = {
+  searchInput: string
+  onSearchInputChange: (value: string) => void
+  onSearch: () => void
+  sort: string
+  onSortChange: (value: string) => void
+}
 
 export function AccountsToolbar({
   searchInput,
@@ -14,13 +14,7 @@ export function AccountsToolbar({
   onSearch,
   sort,
   onSortChange,
-}: {
-  searchInput: string
-  onSearchInputChange: (value: string) => void
-  onSearch: () => void
-  sort: string
-  onSortChange: (value: string) => void
-}) {
+}: Props) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <div className="flex flex-1 items-center gap-2">
@@ -59,3 +53,11 @@ export function AccountsToolbar({
     </div>
   )
 }
+
+const SORT_OPTIONS = [
+  { value: 'createdAt:desc', label: '作成日時（新しい順）' },
+  { value: 'createdAt:asc', label: '作成日時（古い順）' },
+  { value: 'email:asc', label: 'メールアドレス（昇順）' },
+  { value: 'email:desc', label: 'メールアドレス（降順）' },
+  { value: 'lastLoginAt:desc', label: '最終ログイン（新しい順）' },
+]

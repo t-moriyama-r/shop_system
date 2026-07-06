@@ -1,6 +1,13 @@
+import { queryOptions } from '@tanstack/react-query'
 import { API_BASE_URL } from '@/lib/config'
 
 export const PAGE_SIZE = 20
+
+// クエリキーは複数箇所（一覧取得・更新後の無効化）で共有するため repository 層に集約する。
+export const seAdminUsersKeys = {
+  all: ['se-admin-users'] as const,
+  list: (params: ListParams) => [...seAdminUsersKeys.all, params] as const,
+}
 
 export interface SeAdminUser {
   seAdminUserId: string
@@ -48,6 +55,14 @@ export async function fetchSeAdminUsers({
   })
   if (!res.ok) throw new Error('一覧の取得に失敗しました')
   return res.json()
+}
+
+export function seAdminUsersListQuery(params: ListParams) {
+  return queryOptions({
+    queryKey: seAdminUsersKeys.list(params),
+    queryFn: () => fetchSeAdminUsers(params),
+    placeholderData: (previous: SeAdminUsersResponse | undefined) => previous,
+  })
 }
 
 export async function unlockSeAdminUser(id: string): Promise<void> {
