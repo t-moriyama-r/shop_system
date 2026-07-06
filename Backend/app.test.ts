@@ -26,6 +26,8 @@ vi.mock('db/schema', () => ({
   },
   sessions: { sessionId: 'session_id', seAdminUserId: 'se_admin_user_id' },
   auditLogs: {},
+  shopAccounts: {},
+  emailNotificationLogs: {},
 }))
 
 // 認証系ルート/ミドルウェアが実 DB クライアントを読み込まないようスタブする。

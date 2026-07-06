@@ -19,6 +19,8 @@ vi.mock('db/schema', () => ({
   auditLogs: {},
   seAdminUsers: {},
   sessions: {},
+  shopAccounts: {},
+  emailNotificationLogs: {},
 }))
 vi.mock('db/sessions', () => ({}))
 vi.mock('db/audit-logs', () => ({}))
