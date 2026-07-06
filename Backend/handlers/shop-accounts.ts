@@ -35,8 +35,7 @@ function generateInitialPassword(): string {
 }
 
 // 発行完了通知メールの送信をトリガーする。BP-005/BP-011 の設計どおり非同期
-// （fire-and-forget）で実行し、HTTPレスポンスをブロックしない。送信結果は
-// sendShopAccountIssuedNotification 内で email_notification_logs に記録される。
+// （fire-and-forget）で実行し、HTTPレスポンスをブロックしない。
 function triggerShopAccountIssuedNotification(
   params: Parameters<typeof sendShopAccountIssuedNotification>[0],
 ): void {
