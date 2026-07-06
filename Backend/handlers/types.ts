@@ -4,7 +4,7 @@
 // route はそれを `c.json(body, status)` と Cookie 適用に変換するだけにする。
 
 // 本アプリのハンドラが返しうる HTTP ステータス（いずれも本文を持つコード）。
-export type HandlerStatus = 200 | 400 | 401 | 403 | 404 | 409
+export type HandlerStatus = 200 | 201 | 400 | 401 | 403 | 404 | 409
 
 // 監査ログに付与する HTTP 由来のメタ情報（route が抽出して handler に渡す）。
 export interface ClientMeta {

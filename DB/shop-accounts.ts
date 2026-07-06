@@ -13,6 +13,9 @@ export function isShopAccountStatus(value: string): value is ShopAccountStatus {
   return (SHOP_ACCOUNT_STATUSES as readonly string[]).includes(value)
 }
 
+// アカウント発行完了通知の種別（email_notification_logs.notification_type）。
+export const SHOP_ACCOUNT_ISSUED_NOTIFICATION = 'SHOP_ACCOUNT_ISSUED'
+
 // ---------------------------------------------------------------------------
 // データアクセス関数（Backend の route/handler から利用する）。
 //
@@ -111,6 +114,62 @@ export async function listShopAccounts(
     .where(whereClause)
 
   return { rows, total }
+}
+
+/**
+ * メールアドレスからショップアカウントの存在を確認する（発行時の重複チェック用）。
+ * email はユニーク制約があるため、論理削除済みも含めて全レコードを対象に確認する。
+ */
+export async function findShopAccountByEmail(
+  email: string,
+): Promise<{ shopAccountId: string } | undefined> {
+  const [row] = await db
+    .select({ shopAccountId: shopAccounts.shopAccountId })
+    .from(shopAccounts)
+    .where(eq(shopAccounts.email, email))
+  return row
+}
+
+export interface CreateShopAccountInput {
+  shopName: string
+  contactName: string
+  email: string
+  initialPasswordHash: string
+  issuedBySeAdminUserId: string
+}
+
+/**
+ * ショップアカウントを新規発行する。
+ * shop_accounts への登録と、発行完了通知メールの PENDING レコード作成
+ * （email_notification_logs）を単一トランザクションで行う。実際のメール送信は
+ * BP-005（メール通知送信処理）が PENDING レコードを起点に非同期実行する。
+ * 返り値には initial_password_hash を含めない（publicColumns のみ）。
+ */
+export async function createShopAccount(
+  input: CreateShopAccountInput,
+): Promise<ShopAccountListItem> {
+  return db.transaction(async (tx) => {
+    const [account] = await tx
+      .insert(shopAccounts)
+      .values({
+        shopName: input.shopName,
+        contactName: input.contactName,
+        email: input.email,
+        initialPasswordHash: input.initialPasswordHash,
+        accountStatus: 'pending',
+        issuedBySeAdminUserId: input.issuedBySeAdminUserId,
+      })
+      .returning(publicColumns)
+
+    await tx.insert(emailNotificationLogs).values({
+      shopAccountId: account.shopAccountId,
+      toEmail: input.email,
+      notificationType: SHOP_ACCOUNT_ISSUED_NOTIFICATION,
+      sendStatus: 'PENDING',
+    })
+
+    return account
+  })
 }
 
 /**

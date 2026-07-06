@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { authMiddleware, type AuthUser } from '../middleware/auth'
 import {
+  createShopAccountHandler,
   getShopAccountHandler,
   listShopAccountsHandler,
   updateShopAccountStatusHandler,
@@ -20,6 +21,21 @@ shopAccountsRoute.get('/', async (c) => {
     status: c.req.query('status'),
     keyword: c.req.query('keyword'),
     includeDeleted: c.req.query('includeDeleted'),
+  })
+  return c.json(result.body, result.status)
+})
+
+// POST /api/shop-accounts
+shopAccountsRoute.post('/', async (c) => {
+  const body = await c.req
+    .json<{ shopName?: unknown; contactName?: unknown; email?: unknown }>()
+    .catch(() => ({}) as { shopName?: unknown; contactName?: unknown; email?: unknown })
+  const result = await createShopAccountHandler({
+    shopName: body.shopName,
+    contactName: body.contactName,
+    email: body.email,
+    operator: c.get('user'),
+    meta: clientMeta(c),
   })
   return c.json(result.body, result.status)
 })
