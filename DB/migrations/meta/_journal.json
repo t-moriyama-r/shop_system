@@ -15,6 +15,13 @@
       "when": 1783095519305,
       "tag": "0001_rainy_leo",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783335594698,
+      "tag": "0002_audit_logs_tamper_protection",
+      "breakpoints": true
     }
   ]
 }

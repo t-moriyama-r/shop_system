@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, lt, lte, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lt, lte, sql, type SQL } from 'drizzle-orm'
 
 import { db } from './client'
 import { auditLogs } from './schema'
@@ -89,18 +89,22 @@ export function auditLogRetentionCutoff(now: Date = new Date()): Date {
 /**
  * 保持期間を超過した監査ログを物理削除する。
  *
- * 改ざん防止のため audit_logs はアプリケーション層からの UPDATE/DELETE を不可とするが
- * （BP-012 備考）、保持期間超過レコードの削除はこの日次バッチのみ例外的に許可する。
+ * 改ざん防止のため audit_logs へは DB のトリガーで UPDATE/DELETE を拒否している
+ * （BP-012 備考）。保持期間超過レコードの削除はこの日次バッチのみ例外的に許可されており、
+ * トランザクション内でローカル設定 `app.audit_log_delete_allowed` を有効化した上で削除する。
  * 運用では日次 cron 等で `deleteExpiredAuditLogs(auditLogRetentionCutoff())` を実行する。
  *
  * @param cutoff この日時より前に作成された（createdAt < cutoff）ログを削除する
  * @returns 削除した監査ログ件数
  */
 export async function deleteExpiredAuditLogs(cutoff: Date): Promise<number> {
-  const deleted = await db
-    .delete(auditLogs)
-    .where(lt(auditLogs.createdAt, cutoff))
-    .returning({ auditLogId: auditLogs.auditLogId })
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SET LOCAL app.audit_log_delete_allowed = 'on'`)
+    const deleted = await tx
+      .delete(auditLogs)
+      .where(lt(auditLogs.createdAt, cutoff))
+      .returning({ auditLogId: auditLogs.auditLogId })
 
-  return deleted.length
+    return deleted.length
+  })
 }
