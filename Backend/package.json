@@ -15,6 +15,7 @@
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1079.0",
     "@hono/node-server": "^1.13.7",
     "bcrypt": "^6.0.0",
     "db": "workspace:*",

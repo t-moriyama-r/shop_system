@@ -14,6 +14,7 @@ import {
   updateShopAccountStatus,
 } from 'db/shop-accounts'
 import { recordAuditLog } from '../lib/audit-log'
+import { sendShopAccountIssuedNotification } from '../lib/email/notify'
 import type { AuthUser } from '../middleware/auth'
 import type { ClientMeta, HandlerResult } from './types'
 
@@ -31,6 +32,17 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // DB にはハッシュ値のみを保存する（設計 BP-003 備考）。
 function generateInitialPassword(): string {
   return crypto.randomBytes(18).toString('base64url')
+}
+
+// 発行完了通知メールの送信をトリガーする。BP-005/BP-011 の設計どおり非同期
+// （fire-and-forget）で実行し、HTTPレスポンスをブロックしない。送信結果は
+// sendShopAccountIssuedNotification 内で email_notification_logs に記録される。
+function triggerShopAccountIssuedNotification(
+  params: Parameters<typeof sendShopAccountIssuedNotification>[0],
+): void {
+  void sendShopAccountIssuedNotification(params).catch((err) => {
+    console.error('通知メールの送信処理でエラーが発生しました', err)
+  })
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number, max?: number): number {
@@ -122,14 +134,24 @@ export async function createShopAccountHandler(
     return { status: 409, body: { error: 'このメールアドレスは既に登録されています' } }
   }
 
-  const initialPasswordHash = await bcrypt.hash(generateInitialPassword(), BCRYPT_SALT_ROUNDS)
+  const temporaryPassword = generateInitialPassword()
+  const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
 
-  const account = await createShopAccount({
+  const { account, emailNotificationLogId } = await createShopAccount({
     shopName: shopName.value,
     contactName: contactName.value,
     email: email.value,
     initialPasswordHash,
     issuedBySeAdminUserId: input.operator.seAdminUserId,
+  })
+
+  triggerShopAccountIssuedNotification({
+    emailNotificationLogId,
+    shopAccountId: account.shopAccountId,
+    toEmail: account.email,
+    shopName: account.shopName,
+    contactName: account.contactName,
+    temporaryPassword,
   })
 
   await recordAuditLog({
@@ -264,10 +286,25 @@ export async function resendNotificationHandler(
     return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
   }
 
+  // 再送信時は新しい一時パスワードを発行し直す（旧パスワードはメール送信済みのため
+  // 平文を保持していない）。
+  const temporaryPassword = generateInitialPassword()
+  const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
+
   const log = await createResendEmailNotificationLog({
     shopAccountId: input.shopAccountId,
     toEmail: account.email,
     notificationType: SHOP_ACCOUNT_ISSUED_NOTIFICATION,
+    initialPasswordHash,
+  })
+
+  triggerShopAccountIssuedNotification({
+    emailNotificationLogId: log.emailNotificationLogId,
+    shopAccountId: input.shopAccountId,
+    toEmail: account.email,
+    shopName: account.shopName,
+    contactName: account.contactName,
+    temporaryPassword,
   })
 
   await recordAuditLog({
