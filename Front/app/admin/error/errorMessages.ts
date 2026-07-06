@@ -6,18 +6,21 @@
  * （スタックトレース等）は含めず、SE管理者向けのわかりやすい文言のみを扱う。
  */
 
+/** 画面が扱うエラーコードの一覧。 */
+export type ErrorCode = '400' | '403' | '404' | '500' | '503'
+
 export type ErrorDefinition = {
   /** 表示用のエラーコード（例: '500', '404'） */
-  code: string
+  code: ErrorCode
   /** エラーの種別を端的に表すタイトル */
   title: string
   /** SE管理者向けのわかりやすい説明文 */
   message: string
 }
 
-const DEFAULT_CODE = '500'
+const DEFAULT_CODE: ErrorCode = '500'
 
-const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
+const ERROR_DEFINITIONS: Record<ErrorCode, ErrorDefinition> = {
   '400': {
     code: '400',
     title: 'リクエストに誤りがあります',
@@ -50,13 +53,17 @@ const ERROR_DEFINITIONS: Record<string, ErrorDefinition> = {
   },
 }
 
+function isErrorCode(code: string): code is ErrorCode {
+  return code in ERROR_DEFINITIONS
+}
+
 /**
  * エラーコードに対応する表示定義を返す。未定義・未指定のコードは
  * 汎用のシステムエラー（500）にフォールバックする。
  */
 export function resolveError(code?: string | null): ErrorDefinition {
   const normalized = code?.trim()
-  if (normalized && normalized in ERROR_DEFINITIONS) {
+  if (normalized && isErrorCode(normalized)) {
     return ERROR_DEFINITIONS[normalized]
   }
   return ERROR_DEFINITIONS[DEFAULT_CODE]
