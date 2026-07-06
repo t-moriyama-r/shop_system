@@ -285,8 +285,7 @@ export async function resendNotificationHandler(
     return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
   }
 
-  // 再送信時は新しい一時パスワードを発行し直す（旧パスワードはメール送信済みのため
-  // 平文を保持していない）。
+  // 再送信時は新しい一時パスワードを発行し直す。
   const temporaryPassword = generateInitialPassword()
   const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
 
