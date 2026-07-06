@@ -74,20 +74,20 @@ beforeEach(() => {
 })
 
 describe('findValidSession', () => {
-  it('returns the first matching session', async () => {
+  it('最初に一致したセッションを返す', async () => {
     h.state.selectResult = [{ sessionId: 's1', seAdminUserId: 'u1' }]
     const session = await findValidSession('s1', new Date())
     expect(session).toEqual({ sessionId: 's1', seAdminUserId: 'u1' })
   })
 
-  it('returns undefined when no session matches', async () => {
+  it('一致するセッションがない場合はundefinedを返す', async () => {
     h.state.selectResult = []
     expect(await findValidSession('missing')).toBeUndefined()
   })
 })
 
 describe('createSession', () => {
-  it('inserts a session with the given id', async () => {
+  it('指定したIDでセッションを挿入する', async () => {
     const expiresAt = new Date('2026-07-04T00:00:00Z')
     await createSession('sid', 'u1', expiresAt)
     expect(h.state.insertTables).toEqual([sessions])
@@ -96,7 +96,7 @@ describe('createSession', () => {
 })
 
 describe('extendSession', () => {
-  it('updates the expiry', async () => {
+  it('有効期限を更新する', async () => {
     const expiresAt = new Date('2026-07-04T00:30:00Z')
     await extendSession('sid', expiresAt)
     expect(h.state.updateTables).toEqual([sessions])
@@ -105,14 +105,14 @@ describe('extendSession', () => {
 })
 
 describe('deleteSession', () => {
-  it('deletes the single session', async () => {
+  it('単一のセッションを削除する', async () => {
     await deleteSession('sid')
     expect(h.state.deleteTables).toEqual([sessions])
   })
 })
 
 describe('deleteSessionsForUser', () => {
-  it('deletes all sessions for the user and returns the count', async () => {
+  it('ユーザーの全セッションを削除し、その件数を返す', async () => {
     h.state.deleteReturning = [{ sessionId: 'a' }, { sessionId: 'b' }]
     const count = await deleteSessionsForUser('u1')
     expect(count).toBe(2)
@@ -121,14 +121,14 @@ describe('deleteSessionsForUser', () => {
 })
 
 describe('deleteExpiredSessions', () => {
-  it('deletes expired sessions and returns the number of deleted rows', async () => {
+  it('期限切れのセッションを削除し、削除件数を返す', async () => {
     h.state.deleteReturning = [{ sessionId: 'a' }, { sessionId: 'b' }]
     const count = await deleteExpiredSessions(new Date('2026-07-04T00:00:00Z'))
     expect(count).toBe(2)
     expect(h.state.deleteTables).toEqual([sessions])
   })
 
-  it('returns 0 when no sessions are expired', async () => {
+  it('期限切れのセッションがない場合は0を返す', async () => {
     h.state.deleteReturning = []
     expect(await deleteExpiredSessions()).toBe(0)
   })

@@ -2,12 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { getTableColumns, getTableName } from 'drizzle-orm'
 import { menuItems } from './schema'
 
-describe('menuItems table', () => {
-  it('has the correct table name', () => {
+describe('menuItemsテーブル', () => {
+  it('正しいテーブル名を持つ', () => {
     expect(getTableName(menuItems)).toBe('menu_items')
   })
 
-  it('has the expected columns', () => {
+  it('期待されるカラムを持つ', () => {
     const columns = getTableColumns(menuItems)
     const columnNames = Object.keys(columns)
 
@@ -18,12 +18,12 @@ describe('menuItems table', () => {
     expect(columnNames).toContain('updatedAt')
   })
 
-  it('has exactly 5 columns', () => {
+  it('ちょうど5個のカラムを持つ', () => {
     const columns = getTableColumns(menuItems)
     expect(Object.keys(columns)).toHaveLength(5)
   })
 
-  it('uses uuid as the primary key for menuItemId', () => {
+  it('menuItemIdの主キーとしてuuidを使用する', () => {
     const columns = getTableColumns(menuItems)
     const menuItemId = columns.menuItemId
 
@@ -32,7 +32,7 @@ describe('menuItems table', () => {
     expect(menuItemId.hasDefault).toBe(true)
   })
 
-  it('has a non-nullable name column with varchar(255)', () => {
+  it('nameカラムはvarchar(255)でNULLを許容しない', () => {
     const columns = getTableColumns(menuItems)
     const name = columns.name
 
@@ -40,7 +40,7 @@ describe('menuItems table', () => {
     expect(name.notNull).toBe(true)
   })
 
-  it('has a non-nullable integer price column', () => {
+  it('priceカラムはNULLを許容しない整数型である', () => {
     const columns = getTableColumns(menuItems)
     const price = columns.price
 
@@ -48,7 +48,7 @@ describe('menuItems table', () => {
     expect(price.notNull).toBe(true)
   })
 
-  it('has timestamp columns with timezone and defaults', () => {
+  it('タイムスタンプカラムはタイムゾーン付きでデフォルト値を持つ', () => {
     const columns = getTableColumns(menuItems)
 
     expect(columns.createdAt.columnType).toBe('PgTimestamp')

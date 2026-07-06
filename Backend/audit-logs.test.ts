@@ -35,7 +35,7 @@ beforeEach(() => {
 })
 
 describe('GET /api/audit-logs', () => {
-  it('returns rows with pagination metadata (default limit 50)', async () => {
+  it('ページネーション情報付きで結果を返す（デフォルトlimitは50）', async () => {
     const rows = [
       { auditLogId: 'a1', actionType: 'SE_ADMIN_CREATE', result: 'SUCCESS', createdAt: new Date() },
     ]
@@ -49,14 +49,14 @@ describe('GET /api/audit-logs', () => {
     expect(listAuditLogs).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 50 }))
   })
 
-  it('caps limit at the maximum (100)', async () => {
+  it('limitの上限（100）でキャップする', async () => {
     const res = await app.request('/api/audit-logs?limit=500')
     const body = await res.json()
     expect(body.pagination.limit).toBe(100)
     expect(listAuditLogs).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }))
   })
 
-  it('forwards filters to the data-access layer', async () => {
+  it('フィルタ条件をデータアクセス層に渡す', async () => {
     const res = await app.request(
       `/api/audit-logs?actionType=SE_ADMIN_DELETE&result=SUCCESS&targetType=se_admin_user&seAdminUserId=${VALID_UUID}&targetId=${VALID_UUID}&dateFrom=2026-01-01&dateTo=2026-12-31`,
     )
@@ -74,25 +74,25 @@ describe('GET /api/audit-logs', () => {
     )
   })
 
-  it('rejects a non-UUID seAdminUserId with 400 (does not query)', async () => {
+  it('seAdminUserIdがUUID形式でない場合は400を返す（クエリを実行しない）', async () => {
     const res = await app.request('/api/audit-logs?seAdminUserId=not-a-uuid')
     expect(res.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()
   })
 
-  it('rejects a non-UUID targetId with 400', async () => {
+  it('targetIdがUUID形式でない場合は400を返す', async () => {
     const res = await app.request('/api/audit-logs?targetId=not-a-uuid')
     expect(res.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()
   })
 
-  it('rejects an invalid dateFrom with 400', async () => {
+  it('dateFromが不正な場合は400を返す', async () => {
     const res = await app.request('/api/audit-logs?dateFrom=not-a-date')
     expect(res.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()
   })
 
-  it('rejects an invalid dateTo with 400', async () => {
+  it('dateToが不正な場合は400を返す', async () => {
     const res = await app.request('/api/audit-logs?dateTo=not-a-date')
     expect(res.status).toBe(400)
     expect(listAuditLogs).not.toHaveBeenCalled()

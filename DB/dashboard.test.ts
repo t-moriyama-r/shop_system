@@ -25,7 +25,7 @@ beforeEach(() => {
 })
 
 describe('getDashboardSummary', () => {
-  it('aggregates shop-account status counts and se-admin total', async () => {
+  it('ショップアカウントのステータス別件数とSE管理者の合計を集計する', async () => {
     h.state.selectQueue = [
       [{ total: 5, active: 2, pending: 2, suspended: 1 }],
       [{ total: 3 }],
@@ -39,7 +39,7 @@ describe('getDashboardSummary', () => {
 })
 
 describe('listShopAccountActivities', () => {
-  it('attaches the latest email log per account (first in desc order wins)', async () => {
+  it('アカウントごとに最新のメールログを付加する（降順の先頭が採用される）', async () => {
     const accounts = [
       { shopAccountId: 's1', shopName: 'A', email: 'a@x', accountStatus: 'active', issuedBySeAdminUserId: 'op', createdAt: new Date() },
       { shopAccountId: 's2', shopName: 'B', email: 'b@x', accountStatus: 'pending', issuedBySeAdminUserId: 'op', createdAt: new Date() },
@@ -56,7 +56,7 @@ describe('listShopAccountActivities', () => {
     expect(result[1].latestNotification).toBeNull()
   })
 
-  it('returns an empty array without a second query when there are no accounts', async () => {
+  it('アカウントが存在しない場合は2件目のクエリを実行せず空配列を返す', async () => {
     h.state.selectQueue = [[]]
     expect(await listShopAccountActivities(10)).toEqual([])
   })

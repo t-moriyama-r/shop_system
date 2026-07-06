@@ -26,7 +26,7 @@ beforeEach(() => {
 })
 
 describe('sendShopAccountIssuedNotification', () => {
-  it('records SUCCESS when the sender succeeds', async () => {
+  it('送信が成功した場合はSUCCESSを記録する', async () => {
     send.mockResolvedValue({ success: true })
     await sendShopAccountIssuedNotification(baseInput)
 
@@ -45,7 +45,7 @@ describe('sendShopAccountIssuedNotification', () => {
     })
   })
 
-  it('records FAILURE with the error message when the sender fails', async () => {
+  it('送信が失敗した場合はエラーメッセージ付きでFAILUREを記録する', async () => {
     send.mockResolvedValue({ success: false, error: 'SES timeout' })
     await sendShopAccountIssuedNotification(baseInput)
 
@@ -57,7 +57,7 @@ describe('sendShopAccountIssuedNotification', () => {
     })
   })
 
-  it('records FAILURE when the sender throws instead of rejecting gracefully', async () => {
+  it('送信処理が例外をスローした場合もFAILUREを記録する', async () => {
     send.mockRejectedValue(new Error('network down'))
     await sendShopAccountIssuedNotification(baseInput)
 

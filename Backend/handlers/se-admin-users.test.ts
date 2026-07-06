@@ -29,7 +29,7 @@ beforeEach(() => {
 })
 
 describe('listSeAdminUsersHandler', () => {
-  it('returns 200 with pagination metadata', async () => {
+  it('ページネーション情報付きで200を返す', async () => {
     listSeAdminUsers.mockResolvedValue({ rows: [{ seAdminUserId: 'u1' }], total: 25 })
     const r = await listSeAdminUsersHandler({ page: '1', limit: '20' })
     expect(r.status).toBe(200)
@@ -37,13 +37,13 @@ describe('listSeAdminUsersHandler', () => {
     expect(listSeAdminUsers).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 20 }))
   })
 
-  it('parses the isLocked filter into a boolean', async () => {
+  it('isLockedフィルタを真偽値にパースする', async () => {
     listSeAdminUsers.mockResolvedValue({ rows: [], total: 0 })
     await listSeAdminUsersHandler({ isLocked: 'true' })
     expect(listSeAdminUsers).toHaveBeenCalledWith(expect.objectContaining({ isLocked: true }))
   })
 
-  it('caps limit at the maximum (100)', async () => {
+  it('limitを上限値(100)に制限する', async () => {
     listSeAdminUsers.mockResolvedValue({ rows: [], total: 0 })
     const r = await listSeAdminUsersHandler({ limit: '500' })
     expect(r.body).toMatchObject({ pagination: { limit: 100 } })
@@ -51,21 +51,21 @@ describe('listSeAdminUsersHandler', () => {
 })
 
 describe('deleteSeAdminUserHandler', () => {
-  it('rejects deleting own account with 403', async () => {
+  it('自分自身のアカウント削除は403で拒否する', async () => {
     const r = await deleteSeAdminUserHandler({ targetId: 'operator-1', operator, meta })
     expect(r.status).toBe(403)
     expect(findActiveSeAdminById).not.toHaveBeenCalled()
     expect(recordAuditLog).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when target does not exist', async () => {
+  it('対象が存在しない場合は404を返す', async () => {
     findActiveSeAdminById.mockResolvedValue(undefined)
     const r = await deleteSeAdminUserHandler({ targetId: 'missing', operator, meta })
     expect(r.status).toBe(404)
     expect(softDeleteSeAdminUser).not.toHaveBeenCalled()
   })
 
-  it('logically deletes target and records audit log', async () => {
+  it('対象を論理削除し、監査ログを記録する', async () => {
     findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com' })
     const r = await deleteSeAdminUserHandler({ targetId: 'u2', operator, meta })
     expect(r.status).toBe(200)
@@ -77,19 +77,19 @@ describe('deleteSeAdminUserHandler', () => {
 })
 
 describe('setSeAdminLockHandler', () => {
-  it('returns 400 when isLocked is not a boolean', async () => {
+  it('isLockedが真偽値でない場合は400を返す', async () => {
     const r = await setSeAdminLockHandler({ targetId: 'u2', operator, isLocked: undefined, meta })
     expect(r.status).toBe(400)
     expect(findActiveSeAdminById).not.toHaveBeenCalled()
   })
 
-  it('returns 404 when target does not exist', async () => {
+  it('対象が存在しない場合は404を返す', async () => {
     findActiveSeAdminById.mockResolvedValue(undefined)
     const r = await setSeAdminLockHandler({ targetId: 'missing', operator, isLocked: false, meta })
     expect(r.status).toBe(404)
   })
 
-  it('unlocks account and records ACCOUNT_UNLOCK', async () => {
+  it('アカウントのロックを解除し、ACCOUNT_UNLOCKを記録する', async () => {
     findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com', isLocked: true })
     const r = await setSeAdminLockHandler({ targetId: 'u2', operator, isLocked: false, meta })
     expect(r.status).toBe(200)
@@ -100,7 +100,7 @@ describe('setSeAdminLockHandler', () => {
     )
   })
 
-  it('locks account and records ACCOUNT_LOCK', async () => {
+  it('アカウントをロックし、ACCOUNT_LOCKを記録する', async () => {
     findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com', isLocked: false })
     const r = await setSeAdminLockHandler({ targetId: 'u2', operator, isLocked: true, meta })
     expect(r.status).toBe(200)
