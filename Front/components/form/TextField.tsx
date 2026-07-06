@@ -12,8 +12,6 @@ type Props = {
   required?: boolean
 }
 
-// react-hook-form の register 結果を受け取る汎用テキスト入力。複数フォームで再利用するため
-// 画面配下ではなく共通の components/form に置く。
 export function TextField({
   id,
   label,

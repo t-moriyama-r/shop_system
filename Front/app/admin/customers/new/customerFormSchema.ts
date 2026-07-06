@@ -3,8 +3,6 @@ import { z } from 'zod'
 const MAX_FIELD_LENGTH = 255
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-// サーバ（Backend/handlers/shop-accounts.ts）と同じ基準でクライアント側も検証する。
-// trim 済みの値がそのまま onSubmit に渡るため、送信前の整形も本スキーマに集約する。
 export const customerFormSchema = z.object({
   shopName: z
     .string()

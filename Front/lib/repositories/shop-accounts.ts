@@ -1,10 +1,5 @@
 import { API_BASE_URL } from '@/lib/config'
 
-// クエリキーは一覧取得・発行後の無効化など複数箇所で共有し得るため repository 層に集約する。
-export const shopAccountsKeys = {
-  all: ['shop-accounts'] as const,
-}
-
 export interface ShopAccount {
   shopAccountId: string
   shopName: string
