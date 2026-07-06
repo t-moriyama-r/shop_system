@@ -205,6 +205,60 @@ export async function listEmailLogsByShopAccount(
     .orderBy(desc(emailNotificationLogs.createdAt))
 }
 
+export interface ListEmailNotificationLogsInput {
+  shopAccountId: string
+  page: number
+  limit: number
+}
+
+/**
+ * 指定ショップアカウントのメール送信ログをページネーション付きで取得する
+ * （createdAt 降順、API仕様書 項目12）。
+ */
+export async function listEmailNotificationLogsPage(
+  input: ListEmailNotificationLogsInput,
+): Promise<{ rows: EmailNotificationLog[]; total: number }> {
+  const whereClause = eq(emailNotificationLogs.shopAccountId, input.shopAccountId)
+
+  const rows = await db
+    .select()
+    .from(emailNotificationLogs)
+    .where(whereClause)
+    .orderBy(desc(emailNotificationLogs.createdAt))
+    .limit(input.limit)
+    .offset((input.page - 1) * input.limit)
+
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(emailNotificationLogs)
+    .where(whereClause)
+
+  return { rows, total }
+}
+
+/**
+ * 通知メールの再送信をトリガーする。email_notification_logs に新たな PENDING
+ * レコードを作成する（API仕様書 項目11）。実際の送信は BP-005（メール送信処理、
+ * 別Issue）が PENDING レコードを起点に非同期実行する。
+ */
+export async function createResendEmailNotificationLog(input: {
+  shopAccountId: string
+  toEmail: string
+  notificationType: string
+}): Promise<EmailNotificationLog> {
+  const [log] = await db
+    .insert(emailNotificationLogs)
+    .values({
+      shopAccountId: input.shopAccountId,
+      toEmail: input.toEmail,
+      notificationType: input.notificationType,
+      sendStatus: 'PENDING',
+    })
+    .returning()
+
+  return log
+}
+
 /**
  * ショップアカウントのステータスを更新する。監査ログ記録は呼び出し側の責務。
  */
