@@ -20,10 +20,13 @@ description: reviewer サブエージェント固有のレビュー観点・基�
 - 詳細な方針は coder 向けスキル `coder-guidelines` を参照。
 - `db` パッケージの公開エントリは `DB/package.json` の `exports`（`.` = `client.ts`, `./schema` = `schema.ts`）で明示する運用。新規サブパス公開が必要な場合は `exports` へ追記されているかも確認する。
 
-### route ハンドラ直下にサービスロジックが書かれていないか
+### route ハンドラ直下にサービスロジックが書かれていないか（3層構成）
 
-`Backend/routes/*.ts` の route ハンドラ内に、DB クエリ組み立て・フィルタ条件構築・集計などのサービス／ビジネスロジックが直接書かれていないかを確認する。書かれている場合は、`db` パッケージのデータアクセス関数（`DB/se-admin.ts` / `DB/sessions.ts` と同流儀）へ切り出し、route は HTTP 入出力（パース・バリデーション・整形）に限定する形に修正を求める。
+Backend は route層 / handler層 / データアクセス層（`db`）の3層に分ける方針。`Backend/routes/*.ts` の route ハンドラ内に、次のようなロジックが直接書かれていないかを確認する。書かれている場合は handler 層（`Backend/handlers/*.ts`）へ切り出すよう修正を求める。
 
-- バリデーションや `400` 判定など HTTP の関心事は route 側に残してよい。
-- 詳細な方針は coder 向けスキル `coder-guidelines`「route ハンドラ直下にサービスロジックを書かない」を参照。
-- 既存 route（`auth.ts` / `se-admin-users.ts` 等）は規約導入前の実装でインラインクエリが残っており、別 issue でのリファクタリング対象。新規・改修分について本観点を確認する。
+- DB クエリ組み立て（`db.select().from(...)` 等）→ データアクセス層（`db/xxx`）へ
+- バリデーション（UUID/日時/必須）・分岐（自己削除判定・存在チェック）・オーケストレーション・監査ログ記録（`recordAuditLog`）→ handler 層へ
+
+route 層に残ってよいのは、`c.req` からの生の入力取り出し・`c.json(body, status)` 整形・Cookie 反映（`applySessionCookie`）・ミドルウェア登録といった **Hono 依存の配線のみ**。handler は `HandlerResult`（`{ status, body, cookie? }`）を返し Hono 非依存であること（＝route を介さずユニットテスト可能なこと）、Cookie を直接操作せず `SessionCookieDirective` を返していることも確認する。
+
+- 詳細な方針は coder 向けスキル `coder-guidelines`「route ハンドラ直下にサービスロジックを書かない（3層構成）」を参照。

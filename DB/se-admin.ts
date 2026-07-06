@@ -1,7 +1,10 @@
-import { and, eq } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, type SQL } from 'drizzle-orm'
 
 import { db } from './client'
-import { auditLogs, seAdminUsers, sessions } from './schema'
+import { auditLogs, seAdminUsers } from './schema'
+import { deleteSessionsForUser } from './sessions'
+
+export type SeAdminUser = typeof seAdminUsers.$inferSelect
 
 // 一般的なメールアドレス形式の簡易チェック（空白なし・@・ドメインにドット）。
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -110,30 +113,15 @@ export async function deleteSeAdmin(identifier: string): Promise<DeletedSeAdmin>
   }
 
   // 論理削除済みは対象外（is_deleted=false のみ）。引数が UUID なら ID、それ以外はメールで検索する。
-  const condition = isUuid(normalized)
-    ? and(eq(seAdminUsers.seAdminUserId, normalized), eq(seAdminUsers.isDeleted, false))
-    : and(eq(seAdminUsers.email, normalized), eq(seAdminUsers.isDeleted, false))
-
-  const [target] = await db
-    .select({ seAdminUserId: seAdminUsers.seAdminUserId, email: seAdminUsers.email })
-    .from(seAdminUsers)
-    .where(condition)
+  const target = isUuid(normalized)
+    ? await findActiveSeAdminById(normalized)
+    : await findActiveSeAdminByEmail(normalized)
 
   if (!target) {
     throw new SeAdminDeleteError(`対象のSE管理者アカウントが見つかりません: ${normalized}`)
   }
 
-  const now = new Date()
-  await db
-    .update(seAdminUsers)
-    .set({ isDeleted: true, deletedAt: now, updatedAt: now })
-    .where(eq(seAdminUsers.seAdminUserId, target.seAdminUserId))
-
-  // 該当ユーザーの既存セッションを無効化する。
-  const invalidatedSessions = await db
-    .delete(sessions)
-    .where(eq(sessions.seAdminUserId, target.seAdminUserId))
-    .returning({ sessionId: sessions.sessionId })
+  const invalidatedSessionCount = await softDeleteSeAdminUser(target.seAdminUserId)
 
   await db.insert(auditLogs).values({
     operatorType: 'cli',
@@ -147,6 +135,185 @@ export async function deleteSeAdmin(identifier: string): Promise<DeletedSeAdmin>
   return {
     seAdminUserId: target.seAdminUserId,
     email: target.email,
-    invalidatedSessionCount: invalidatedSessions.length,
+    invalidatedSessionCount,
   }
+}
+
+// ---------------------------------------------------------------------------
+// データアクセス関数（Backend の route/middleware から利用する）
+//
+// route ハンドラ直下にクエリを書かず、ここに集約する（coder-guidelines 参照）。
+// HTTP の関心事（バリデーション・レスポンス整形・監査ログの IP/UA 付与）は呼び出し側に残す。
+// ---------------------------------------------------------------------------
+
+const SORTABLE_COLUMNS = {
+  createdAt: seAdminUsers.createdAt,
+  email: seAdminUsers.email,
+  lastLoginAt: seAdminUsers.lastLoginAt,
+} as const
+
+function parseSort(value: string | undefined) {
+  const [rawColumn, rawDirection] = (value ?? '').split(':')
+  const column =
+    rawColumn in SORTABLE_COLUMNS
+      ? SORTABLE_COLUMNS[rawColumn as keyof typeof SORTABLE_COLUMNS]
+      : SORTABLE_COLUMNS.createdAt
+  const direction = rawDirection === 'asc' ? asc : desc
+  return direction(column)
+}
+
+export interface SeAdminListItem {
+  seAdminUserId: string
+  email: string
+  isLocked: boolean
+  failedLoginCount: number
+  lastLoginAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface SeAdminListFilters {
+  keyword?: string
+  isLocked?: boolean
+  sort?: string
+  page: number
+  limit: number
+}
+
+/**
+ * SE管理者アカウント一覧を取得する（論理削除済みは除外、password は返さない）。
+ */
+export async function listSeAdminUsers(
+  filters: SeAdminListFilters,
+): Promise<{ rows: SeAdminListItem[]; total: number }> {
+  const conditions: SQL[] = [eq(seAdminUsers.isDeleted, false)]
+  if (filters.keyword) {
+    conditions.push(ilike(seAdminUsers.email, `%${filters.keyword}%`))
+  }
+  if (typeof filters.isLocked === 'boolean') {
+    conditions.push(eq(seAdminUsers.isLocked, filters.isLocked))
+  }
+
+  const whereClause = and(...conditions)
+  const orderBy = parseSort(filters.sort)
+
+  const rows = await db
+    .select({
+      seAdminUserId: seAdminUsers.seAdminUserId,
+      email: seAdminUsers.email,
+      isLocked: seAdminUsers.isLocked,
+      failedLoginCount: seAdminUsers.failedLoginCount,
+      lastLoginAt: seAdminUsers.lastLoginAt,
+      createdAt: seAdminUsers.createdAt,
+      updatedAt: seAdminUsers.updatedAt,
+    })
+    .from(seAdminUsers)
+    .where(whereClause)
+    .orderBy(orderBy)
+    .limit(filters.limit)
+    .offset((filters.page - 1) * filters.limit)
+
+  const [{ value: total }] = await db
+    .select({ value: count() })
+    .from(seAdminUsers)
+    .where(whereClause)
+
+  return { rows, total }
+}
+
+/**
+ * 論理削除されていない SE管理者アカウントを ID で取得する。
+ */
+export async function findActiveSeAdminById(
+  seAdminUserId: string,
+): Promise<SeAdminUser | undefined> {
+  const [user] = await db
+    .select()
+    .from(seAdminUsers)
+    .where(and(eq(seAdminUsers.seAdminUserId, seAdminUserId), eq(seAdminUsers.isDeleted, false)))
+  return user
+}
+
+/**
+ * 論理削除されていない SE管理者アカウントをメールアドレスで取得する。
+ */
+export async function findActiveSeAdminByEmail(email: string): Promise<SeAdminUser | undefined> {
+  const [user] = await db
+    .select()
+    .from(seAdminUsers)
+    .where(and(eq(seAdminUsers.email, email), eq(seAdminUsers.isDeleted, false)))
+  return user
+}
+
+/**
+ * SE管理者アカウントを論理削除し、該当ユーザーの既存セッションを無効化する。
+ * 監査ログの記録は呼び出し側の責務（CLI/API で operator_type や詳細が異なるため）。
+ *
+ * @returns 無効化した（削除した）セッション数
+ */
+export async function softDeleteSeAdminUser(seAdminUserId: string): Promise<number> {
+  const now = new Date()
+  await db
+    .update(seAdminUsers)
+    .set({ isDeleted: true, deletedAt: now, updatedAt: now })
+    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
+
+  return deleteSessionsForUser(seAdminUserId)
+}
+
+/**
+ * SE管理者アカウントのロック状態を更新する。ロック解除時は連続失敗カウントもリセットする。
+ */
+export async function setSeAdminLock(seAdminUserId: string, isLocked: boolean): Promise<void> {
+  const now = new Date()
+  await db
+    .update(seAdminUsers)
+    .set({
+      isLocked,
+      ...(isLocked ? {} : { failedLoginCount: 0 }),
+      updatedAt: now,
+    })
+    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
+}
+
+/**
+ * ログイン成功時の更新（最終ログイン日時の記録・連続失敗カウントのリセット）。
+ */
+export async function recordSuccessfulLogin(
+  seAdminUserId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db
+    .update(seAdminUsers)
+    .set({ lastLoginAt: now, failedLoginCount: 0, updatedAt: now })
+    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
+}
+
+/**
+ * ログイン失敗時の更新（連続失敗カウント・ロック状態の反映）。
+ */
+export async function applyFailedLoginAttempt(
+  seAdminUserId: string,
+  failedLoginCount: number,
+  isLocked: boolean,
+  now: Date = new Date(),
+): Promise<void> {
+  await db
+    .update(seAdminUsers)
+    .set({ failedLoginCount, isLocked, updatedAt: now })
+    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
+}
+
+/**
+ * パスワード（ハッシュ済み）を設定する。
+ */
+export async function setSeAdminPassword(
+  seAdminUserId: string,
+  hashedPassword: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await db
+    .update(seAdminUsers)
+    .set({ password: hashedPassword, updatedAt: now })
+    .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
 }

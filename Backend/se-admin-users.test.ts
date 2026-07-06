@@ -1,42 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const h = vi.hoisted(() => {
-  const state = { selectQueue: [] as unknown[] }
-  const makeChain = (provider: () => unknown) => {
-    const chain: Record<string, unknown> = {}
-    for (const method of ['from', 'where', 'orderBy', 'limit', 'offset', 'set', 'values']) {
-      chain[method] = () => chain
-    }
-    chain.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
-      Promise.resolve(provider()).then(resolve, reject)
-    return chain
-  }
-  return { state, makeChain }
-})
+const listSeAdminUsers = vi.fn()
+const findActiveSeAdminById = vi.fn()
+const softDeleteSeAdminUser = vi.fn()
+const setSeAdminLock = vi.fn()
 
-vi.mock('db', () => ({
-  db: {
-    select: () => h.makeChain(() => h.state.selectQueue.shift() ?? []),
-    update: () => h.makeChain(() => undefined),
-    delete: () => h.makeChain(() => undefined),
-    insert: () => h.makeChain(() => undefined),
-  },
+vi.mock('db/se-admin', () => ({
+  listSeAdminUsers: (...a: unknown[]) => listSeAdminUsers(...a),
+  findActiveSeAdminById: (...a: unknown[]) => findActiveSeAdminById(...a),
+  softDeleteSeAdminUser: (...a: unknown[]) => softDeleteSeAdminUser(...a),
+  setSeAdminLock: (...a: unknown[]) => setSeAdminLock(...a),
 }))
 
+// app.ts が読み込む他ルート/ミドルウェアが実 DB クライアントを読み込まないようスタブする。
+vi.mock('db', () => ({ db: {} }))
 vi.mock('db/schema', () => ({
-  seAdminUsers: {
-    seAdminUserId: 'se_admin_user_id',
-    email: 'email',
-    isLocked: 'is_locked',
-    failedLoginCount: 'failed_login_count',
-    lastLoginAt: 'last_login_at',
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-    isDeleted: 'is_deleted',
-  },
-  sessions: { sessionId: 'session_id', seAdminUserId: 'se_admin_user_id' },
   menuItems: Symbol('menuItems'),
+  auditLogs: {},
+  seAdminUsers: {},
+  sessions: {},
 }))
+vi.mock('db/sessions', () => ({}))
+vi.mock('db/audit-logs', () => ({}))
 
 vi.mock('./middleware/auth', () => ({
   authMiddleware: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
@@ -51,8 +36,9 @@ vi.mock('./lib/audit-log', () => ({ recordAuditLog: (...args: unknown[]) => reco
 const { app } = await import('./app')
 
 beforeEach(() => {
-  h.state.selectQueue = []
-  recordAuditLog.mockClear()
+  vi.clearAllMocks()
+  softDeleteSeAdminUser.mockResolvedValue(0)
+  setSeAdminLock.mockResolvedValue(undefined)
 })
 
 describe('GET /api/se-admin-users', () => {
@@ -61,24 +47,20 @@ describe('GET /api/se-admin-users', () => {
       { seAdminUserId: 'u1', email: 'a@example.com', isLocked: false, failedLoginCount: 0, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() },
       { seAdminUserId: 'u2', email: 'b@example.com', isLocked: true, failedLoginCount: 5, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() },
     ]
-    h.state.selectQueue = [rows, [{ value: 25 }]]
+    listSeAdminUsers.mockResolvedValue({ rows, total: 25 })
 
     const res = await app.request('/api/se-admin-users?page=1&limit=20')
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.data).toHaveLength(2)
     expect(body.pagination).toEqual({ page: 1, limit: 20, total: 25, totalPages: 2 })
+    expect(listSeAdminUsers).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 20 }))
   })
 
-  it('does not expose password field', async () => {
-    const rows = [
-      { seAdminUserId: 'u1', email: 'a@example.com', isLocked: false, failedLoginCount: 0, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() },
-    ]
-    h.state.selectQueue = [rows, [{ value: 1 }]]
-
-    const res = await app.request('/api/se-admin-users')
-    const body = await res.json()
-    expect(Object.keys(body.data[0])).not.toContain('password')
+  it('parses the isLocked filter into a boolean', async () => {
+    listSeAdminUsers.mockResolvedValue({ rows: [], total: 0 })
+    await app.request('/api/se-admin-users?isLocked=true')
+    expect(listSeAdminUsers).toHaveBeenCalledWith(expect.objectContaining({ isLocked: true }))
   })
 })
 
@@ -86,19 +68,22 @@ describe('DELETE /api/se-admin-users/:id', () => {
   it('rejects deleting own account with 403', async () => {
     const res = await app.request('/api/se-admin-users/operator-1', { method: 'DELETE' })
     expect(res.status).toBe(403)
+    expect(findActiveSeAdminById).not.toHaveBeenCalled()
     expect(recordAuditLog).not.toHaveBeenCalled()
   })
 
   it('returns 404 when target does not exist', async () => {
-    h.state.selectQueue = [[]]
+    findActiveSeAdminById.mockResolvedValue(undefined)
     const res = await app.request('/api/se-admin-users/missing-id', { method: 'DELETE' })
     expect(res.status).toBe(404)
+    expect(softDeleteSeAdminUser).not.toHaveBeenCalled()
   })
 
   it('logically deletes target and records audit log', async () => {
-    h.state.selectQueue = [[{ seAdminUserId: 'u2', email: 'b@example.com', isDeleted: false }]]
+    findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com' })
     const res = await app.request('/api/se-admin-users/u2', { method: 'DELETE' })
     expect(res.status).toBe(200)
+    expect(softDeleteSeAdminUser).toHaveBeenCalledWith('u2')
     expect(recordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: 'SE_ADMIN_DELETE', targetId: 'u2', result: 'SUCCESS' }),
     )
@@ -113,10 +98,11 @@ describe('PATCH /api/se-admin-users/:id/lock', () => {
       body: JSON.stringify({}),
     })
     expect(res.status).toBe(400)
+    expect(findActiveSeAdminById).not.toHaveBeenCalled()
   })
 
   it('returns 404 when target does not exist', async () => {
-    h.state.selectQueue = [[]]
+    findActiveSeAdminById.mockResolvedValue(undefined)
     const res = await app.request('/api/se-admin-users/missing/lock', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -126,7 +112,7 @@ describe('PATCH /api/se-admin-users/:id/lock', () => {
   })
 
   it('unlocks account and records ACCOUNT_UNLOCK', async () => {
-    h.state.selectQueue = [[{ seAdminUserId: 'u2', email: 'b@example.com', isDeleted: false, isLocked: true }]]
+    findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u2', email: 'b@example.com', isLocked: true })
     const res = await app.request('/api/se-admin-users/u2/lock', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -135,6 +121,7 @@ describe('PATCH /api/se-admin-users/:id/lock', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.isLocked).toBe(false)
+    expect(setSeAdminLock).toHaveBeenCalledWith('u2', false)
     expect(recordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: 'ACCOUNT_UNLOCK', targetId: 'u2' }),
     )

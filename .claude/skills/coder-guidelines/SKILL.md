@@ -40,16 +40,18 @@ description: coder サブエージェント固有のコーディング規約・�
 
 新しく `db/xxx` のようなサブパスを外部（`Backend` 等）へ公開する必要がある場合は、`DB/package.json` の `exports` にエントリを追加する。
 
-### route ハンドラ直下にサービスロジックを書かない
+### route ハンドラ直下にサービスロジックを書かない（3層構成）
 
-Hono の route ハンドラ（`Backend/routes/*.ts` の `app.get(...)` 等の中身）に、**DB クエリ組み立て・ビジネスロジックを直接書かないこと**。route はあくまで HTTP の入出力（クエリ/ボディのパース・バリデーション・レスポンス整形・ステータスコード決定）に専念し、データアクセスやドメインロジックは別レイヤの関数に切り出して呼び出す。
+Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` の `app.get(...)` 等の中身）に、**DB クエリ組み立て・バリデーション・分岐・オーケストレーションなどのロジックを直接書かないこと**。
 
-- NG: route ハンドラ内で `db.select().from(...).where(and(...))` のようなクエリ組み立てや、フィルタ条件の構築・集計処理をそのまま記述する
-- OK: `listAuditLogs(filters)` のようなデータアクセス関数を用意し、route からはそれを呼ぶだけにする
+1. **route 層（`Backend/routes/*.ts`）= 配線のみ**
+   Hono に依存する薄い層。パス/メソッド/ミドルウェア登録、`c.req` からの生の入力取り出し（`c.req.query()` / `c.req.param()` / `await c.req.json()`）、`c.json(body, status)` での整形、Cookie の反映（`Backend/lib/http.ts` の `applySessionCookie`）だけを行う。
+2. **handler 層（`Backend/handlers/*.ts`）= HTTP 非依存のロジック**
+   検証（UUID/日時/必須チェック）・分岐（自己削除判定・存在チェック等）・オーケストレーション・監査ログ記録（`recordAuditLog`）を担う。**Hono に依存しない**（引数はプレーンな値、戻り値は `HandlerResult`＝`{ status, body, cookie? }`）ので、route を介さずユニットテストできる。Cookie は直接触らず `SessionCookieDirective` を返して route に委ねる。監査ログ用の IP/UA は route が `clientMeta(c)` で抽出して handler に渡す。
+3. **データアクセス層（`db` パッケージ = `DB/xxx.ts`）= DB クエリ**
+   `db.select()/insert()/update()/delete()` の組み立てはここに集約する。`db/xxx` サブパスを `DB/package.json` の `exports` に追加して `Backend` から利用する。CLI/バッチと API でロジックを共有できる。
 
-切り出し先は、既存の `DB/se-admin.ts`（`createSeAdmin`/`deleteSeAdmin`）や `DB/sessions.ts`（`deleteExpiredSessions`）と同じく **`db` パッケージのデータアクセス関数**とする（`db/xxx` サブパスを `DB/package.json` の `exports` に追加して `Backend` から利用する）。これにより CLI/バッチと API でロジックを共有でき、ユニットテストも route を介さず関数単体で書ける。
+- NG: route ハンドラ内で `db.select().from(...).where(and(...))` を書く／`if (typeof body.isLocked !== 'boolean') return c.json(...)` のような検証・分岐を書く
+- OK: route は `const result = await listSeAdminUsersHandler({ page: c.req.query('page'), ... }); return c.json(result.body, result.status)` のように handler を呼ぶだけ。handler が検証・分岐・`listSeAdminUsers(filters)` 等のデータアクセス関数呼び出しを行う
 
-- 例: `Backend/routes/audit-logs.ts` は入力のパース/バリデーションのみ行い、`listAuditLogs({ actionType, result, ... , page, limit })` を呼んで結果を整形して返す
-- バリデーション（UUID 形式チェック等）や `400` の判定は HTTP の関心事なので route 側に残してよい
-
-> 補足: 既存の route（`auth.ts` / `se-admin-users.ts` 等）はこの規約導入前の実装でインラインクエリが残っている。これらは別途リファクタリングで移行する方針（該当 issue を参照）。新規・改修時は本規約に従うこと。
+> セッションID の採番のように「HTTP ではないがドメインの一部」の処理は handler 側で行い（`issueSession`）、その結果（Cookie に載せる値）を `HandlerResult.cookie` で route に返して route が Set-Cookie する。生成と Cookie 反映で層をまたぐ値は、handler が生成 → route が反映、の向きに統一する。
