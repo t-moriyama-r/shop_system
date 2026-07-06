@@ -9,10 +9,10 @@ import {
   type SeAdminUser,
 } from '@/lib/repositories/se-admin-users'
 import { fetchCurrentUser } from '@/lib/repositories/session'
-import { AccountsToolbar } from './accounts-toolbar'
-import { DeleteConfirmDialog } from './delete-confirm-dialog'
-import { PaginationControls } from './pagination-controls'
-import { SeAdminUserTable } from './se-admin-user-table'
+import { AccountsToolbar } from './AccountsToolbar'
+import { DeleteConfirmDialog } from './DeleteConfirmDialog'
+import { PaginationControls } from './PaginationControls'
+import { SeAdminUserTable } from './SeAdminUserTable'
 
 export function AccountsContent() {
   const queryClient = useQueryClient()

@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { API_BASE_URL as API_BASE } from '@/lib/config'
-import { AdminHeader } from './admin-header'
-import { AdminSidebar } from './admin-sidebar'
+import { AdminHeader } from './AdminHeader'
+import { AdminSidebar } from './AdminSidebar'
 
 interface SessionUser {
   seAdminUserId: string

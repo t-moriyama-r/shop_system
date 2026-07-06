@@ -17,7 +17,7 @@ vi.mock('@/lib/api', () => ({
   },
 }))
 
-const { OrderMenu } = await import('./order-menu')
+const { OrderMenu } = await import('./OrderMenu')
 
 describe('OrderMenu', () => {
   beforeEach(() => {

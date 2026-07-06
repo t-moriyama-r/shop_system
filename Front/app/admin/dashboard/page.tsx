@@ -1,6 +1,6 @@
 'use client'
 
-import { AuthenticatedLayout } from '../components/authenticated-layout'
+import { AuthenticatedLayout } from '../components/AuthenticatedLayout'
 
 export default function DashboardPage() {
   return (

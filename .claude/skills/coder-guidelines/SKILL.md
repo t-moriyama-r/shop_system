@@ -85,6 +85,14 @@ API のベースURLのような**プロジェクト全体に関わる定数を�
 - NG: 複数ファイルで `const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'` を各自定義
 - OK: `lib/config.ts` に `export const API_BASE_URL = ...` を置き、`import { API_BASE_URL } from '@/lib/config'` で参照（`lib/api.ts` の Hono クライアントも同じ定義を使う）
 
+### コンポーネントのファイル名はパスカルケースにする
+
+React コンポーネントを定義するファイル名は**パスカルケース（PascalCase）**にする。ケバブケース（kebab-case）にしない。ファイル名はエクスポートするコンポーネント名と一致させる。
+
+- NG: `accounts-content.tsx` / `delete-confirm-dialog.tsx` / `admin-header.tsx`
+- OK: `AccountsContent.tsx` / `DeleteConfirmDialog.tsx` / `AdminHeader.tsx`
+- 例外: Next.js App Router の予約ファイル（`page.tsx` / `layout.tsx` / `loading.tsx` / `error.tsx` / `route.ts` など）はフレームワーク規約に従い小文字のまま。コンポーネントを定義しない純粋なユーティリティ/設定モジュール（例: `lib/config.ts`、`lib/repositories/se-admin-users.ts`）はキャメル/ケバブ等の従来命名でよい
+
 ### `useState` にはジェネリクスを明示する
 
 `useState<T>(initial)` のように**必ず型引数を明示する**。初期値からの型推論に任せない（`useState('')` は `string`、`useState(0)` は `number` に推論されるが、明示する）。
