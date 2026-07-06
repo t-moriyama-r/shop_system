@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { API_BASE_URL as API_BASE } from '@/lib/config'
-import { AdminHeader } from '../components/admin-header'
+import { AdminHeader } from '../components/AdminHeader'
 
 export default function LoginPage() {
   const router = useRouter()

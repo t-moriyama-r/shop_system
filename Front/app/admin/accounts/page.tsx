@@ -1,5 +1,5 @@
-import { AuthenticatedLayout } from '../components/authenticated-layout'
-import { AccountsContent } from './components/accounts-content'
+import { AuthenticatedLayout } from '../components/AuthenticatedLayout'
+import { AccountsContent } from './components/AccountsContent'
 
 export default function AccountsPage() {
   return (

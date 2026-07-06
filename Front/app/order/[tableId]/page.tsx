@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { OrderMenu } from './order-menu'
+import { OrderMenu } from './OrderMenu'
 
 const TABLE_ID_PATTERN = /^[a-zA-Z0-9_-]{1,32}$/
 
