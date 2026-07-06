@@ -1,6 +1,4 @@
 // 顧客アカウント発行完了通知メールの送信処理（BP-005/BP-011）。
-// email_notification_logs に PENDING レコードが作成されたことをトリガーに、
-// handler 側から非同期（fire-and-forget）で呼び出される想定。
 // 送信結果（成功/失敗）は必ず recordEmailNotificationResult で記録する。
 
 import { recordEmailNotificationResult } from 'db/shop-accounts'
