@@ -9,21 +9,13 @@ import { resolveError } from '../errorMessages'
 
 type SessionState = 'unknown' | 'authenticated' | 'unauthenticated'
 
-function generateReferenceId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  // randomUUID 非対応環境向けのフォールバック
-  return `err-${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`
-}
-
 export function ErrorContent() {
   const searchParams = useSearchParams()
   const error = resolveError(searchParams.get('code'))
 
   // エラー参照ID: クエリで渡された値を優先し、なければ一度だけ生成する。
   const referenceId = useMemo(
-    () => searchParams.get('ref')?.trim() || generateReferenceId(),
+    () => searchParams.get('ref')?.trim() || crypto.randomUUID(),
     [searchParams],
   )
 
