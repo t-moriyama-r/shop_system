@@ -67,8 +67,45 @@ Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` �
 - NG: `page.tsx` の中に `AccountsContent` / `DeleteConfirmDialog` などを全部定義して 400 行になる
 - OK:
   - `app/admin/accounts/page.tsx` … `AuthenticatedLayout` + `<AccountsContent />` だけ
-  - `app/admin/accounts/components/accounts-content.tsx` … 状態管理・データ取得のコンテナ
-  - `app/admin/accounts/components/{se-admin-user-table,accounts-toolbar,pagination-controls,delete-confirm-dialog}.tsx` … 各プレゼンテーション
+  - `app/admin/accounts/components/AccountsContent.tsx` … 状態管理・データ取得のコンテナ
+  - `app/admin/accounts/components/{SeAdminUserTable,AccountsToolbar,PaginationControls,DeleteConfirmDialog}.tsx` … 各プレゼンテーション
+
+**ただし、そのコンポーネント内に閉じている軽微な表示片（ローディング/エラー表示、テーブル本体の分岐、行など）は、同一ファイル内に名前付きコンポーネントとして定義してよい**。別ファイルに切り出すのは再利用され得る／独立した子コンポーネント。ファイル内に閉じるものでも**必ず名前を付けて意図を明確にする**（インラインの巨大な三項演算子や即時JSXの塊を避ける）。
+
+- NG: `SummaryPanel` の中で `{error ? <p/> : loading ? <p/> : <div>...</div>}` と分岐を全部インラインに書く
+- OK: 同一ファイル内に `SummaryBody` / `SummaryCards` / `SummaryFooter` のように名前付きで分割する
+
+### ファイル内の定義順序（コンポーネントを先頭に）
+
+コンポーネントファイルでは**コンポーネント（特に export する主コンポーネント）をファイルの先頭に置く**。ヘルパー関数・定数・（Props 以外の）型などの非コンポーネント定義は、コンポーネントの**後（ファイル下部）にまとめる**。関数宣言と型は巻き上げ（hoisting）されるため、下部に定義しても上部のコンポーネントから参照できる。ただし後述のとおり **Props 型はその対応コンポーネントの直上に置く**（例外）。
+
+- NG: `systemStatusLabel()` などのヘルパー関数や定数をファイル先頭に置き、コンポーネントを下に書く
+- OK: 先頭から `SummaryPanel` → 子コンポーネント群 → 型 / 定数 / ヘルパー関数（区切りコメントは付けない）
+
+### Props は名前付き `type` で、対応コンポーネントの直上に定義する
+
+コンポーネントの props 型は**インラインのオブジェクト型注釈にせず、名前付きの `type` として、その対応するコンポーネントの直上に定義する**。
+
+- **そのファイルのコア（主に export する）コンポーネントの Props 型名は `Props` でよい**（ファイル名＝コンポーネント名から自明なため冗長な接頭辞を付けない）
+- 同一ファイル内のサブコンポーネントは名前が衝突するため、`ActivityRowProps` のように `<コンポーネント名>Props` とする
+- 配置は各コンポーネントの**直上**（ファイル下部にまとめない）
+
+- NG: `function ActivitiesPanel({ activities }: { activities: ShopAccountActivity[]; loading: boolean }) {`（インライン注釈）
+- NG: コアコンポーネントに `ActivitiesPanelProps` のような冗長名を付ける
+- OK:
+  ```tsx
+  type Props = {
+    activities: ShopAccountActivity[]
+    loading: boolean
+    // ...
+  }
+
+  export function ActivitiesPanel({ activities, loading }: Props) { ... }
+
+  type ActivityRowProps = { activity: ShopAccountActivity }
+
+  function ActivityRow({ activity }: ActivityRowProps) { ... }
+  ```
 
 ### API 呼び出しは repository 層に置く（page/component 配下に書かない）
 
@@ -102,12 +139,21 @@ React コンポーネントを定義するファイル名は**パスカルケー
 
 ### データ取得は自前実装せず TanStack Query を使う
 
-`useEffect` + `fetch` + `useState` でローディング/エラー/データを手組みしない。**サーバ状態は `@tanstack/react-query` の `useQuery` / `useMutation` で扱う**。ローディング・エラー・キャッシュ・再取得は Query に任せる。`QueryClientProvider` は `app/providers.tsx`（`app/layout.tsx` で全体をラップ）で提供済み。
+`useEffect` + `fetch` + `useState` でローディング/エラー/データを手組みしない。**サーバ状態は `@tanstack/react-query` の `useQuery` / `useMutation` で扱う**。ローディング・エラー・キャッシュ・再取得は Query に任せる。`QueryClientProvider` は `app/Providers.tsx`（`app/layout.tsx` で全体をラップ）で提供済み。
 
-- 一覧取得は `useQuery({ queryKey: ['se-admin-users', { page, sort, keyword }], queryFn })`。ページ切替時に前ページを保持したい場合は `placeholderData: (prev) => prev`
 - 更新系（削除・ロック解除）は `useMutation`。成功後は `queryClient.invalidateQueries({ queryKey: [...] })` で再取得する
 - NG: `useEffect(() => { fetch(...).then(setItems).catch(setError) }, [...])`
-- OK: `const { data, isLoading, isError } = useQuery({ queryKey, queryFn })`
+- OK: `const { data, isPending, isError } = useQuery(dashboardSummaryQuery())`
+
+### クエリキー・queryOptions は repository 層に集約する
+
+`queryKey` を**コンポーネント内にベタ書きしない**。同じデータを別ページから取得する場合や、更新後に `invalidateQueries` でキャッシュを無効化する場合に、キーが一致していないと意図しない挙動になる。**キーと `queryFn` を repository 層（`lib/repositories/*.ts`）に集約する**。
+
+- クエリキーは**キーファクトリ**として定義する（例: `export const dashboardKeys = { all: ['dashboard'] as const, summary: () => [...dashboardKeys.all, 'summary'] as const, activities: (limit: number) => [...] }`）
+- `queryKey` と `queryFn` を束ねた **`queryOptions` ファクトリ**を repository に置き、コンポーネントは `useQuery(dashboardSummaryQuery())` のように呼ぶだけにする
+- 無効化は同じキーファクトリを使う（例: `queryClient.invalidateQueries({ queryKey: dashboardKeys.all })`）
+- NG: `useQuery({ queryKey: ['dashboard', 'summary'], queryFn: fetchDashboardSummary })` をコンポーネントに直接書く
+- OK: `lib/repositories/dashboard.ts` に `dashboardKeys` と `dashboardSummaryQuery()` / `shopAccountActivitiesQuery(limit)` を置き、コンポーネントは `useQuery(dashboardSummaryQuery())`
 
 ### 長い副作用を書かない・ロジックは関数に分ける
 
