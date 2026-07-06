@@ -29,6 +29,11 @@ vi.mock('db/shop-accounts', async () => {
 const recordAuditLog = vi.fn()
 vi.mock('../lib/audit-log', () => ({ recordAuditLog: (...a: unknown[]) => recordAuditLog(...a) }))
 
+const sendShopAccountIssuedNotification = vi.fn()
+vi.mock('../lib/email/notify', () => ({
+  sendShopAccountIssuedNotification: (...a: unknown[]) => sendShopAccountIssuedNotification(...a),
+}))
+
 const {
   listShopAccountsHandler,
   getShopAccountHandler,
@@ -53,7 +58,11 @@ beforeEach(() => {
   })
   updateShopAccountStatus.mockResolvedValue(undefined)
   findShopAccountByEmail.mockResolvedValue(undefined)
-  createShopAccount.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'shop@example.com' })
+  createShopAccount.mockResolvedValue({
+    account: { shopAccountId: VALID_UUID, email: 'shop@example.com', shopName: 'テストショップ', contactName: '山田太郎' },
+    emailNotificationLogId: 'log-0',
+  })
+  sendShopAccountIssuedNotification.mockResolvedValue(undefined)
 })
 
 describe('createShopAccountHandler', () => {
@@ -121,6 +130,21 @@ describe('createShopAccountHandler', () => {
         result: 'SUCCESS',
       }),
     )
+
+    expect(sendShopAccountIssuedNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailNotificationLogId: 'log-0',
+        shopAccountId: VALID_UUID,
+        toEmail: 'shop@example.com',
+        shopName: 'テストショップ',
+        contactName: '山田太郎',
+      }),
+    )
+    const sendArg = sendShopAccountIssuedNotification.mock.calls[0][0]
+    expect(typeof sendArg.temporaryPassword).toBe('string')
+    expect(sendArg.temporaryPassword.length).toBeGreaterThan(0)
+    // 平文パスワードはレスポンスに含めない。
+    expect(bodyJson).not.toContain(sendArg.temporaryPassword)
   })
 
   it('trims whitespace from fields before persisting', async () => {
@@ -132,6 +156,12 @@ describe('createShopAccountHandler', () => {
     expect(createShopAccount).toHaveBeenCalledWith(
       expect.objectContaining({ shopName: 'Shop', email: 'shop@example.com' }),
     )
+  })
+
+  it('still returns 201 even if the notification send rejects (fire-and-forget)', async () => {
+    sendShopAccountIssuedNotification.mockRejectedValue(new Error('smtp down'))
+    const r = await createShopAccountHandler(validInput)
+    expect(r.status).toBe(201)
   })
 })
 
@@ -308,16 +338,39 @@ describe('resendNotificationHandler', () => {
     expect(createResendEmailNotificationLog).not.toHaveBeenCalled()
   })
 
-  it('creates a new PENDING log and records an audit log', async () => {
-    findShopAccountById.mockResolvedValue({ shopAccountId: VALID_UUID, email: 'a@example.com' })
+  it('creates a new PENDING log with a freshly issued password hash, records an audit log, and triggers the send', async () => {
+    findShopAccountById.mockResolvedValue({
+      shopAccountId: VALID_UUID,
+      email: 'a@example.com',
+      shopName: 'テストショップ',
+      contactName: '山田太郎',
+    })
     const r = await resendNotificationHandler({ shopAccountId: VALID_UUID, operator, meta })
     expect(r.status).toBe(200)
     expect(r.body).toMatchObject({ emailNotificationLog: { emailNotificationLogId: 'log-1' } })
-    expect(createResendEmailNotificationLog).toHaveBeenCalledWith({
+
+    const resendArg = createResendEmailNotificationLog.mock.calls[0][0]
+    expect(resendArg).toMatchObject({
       shopAccountId: VALID_UUID,
       toEmail: 'a@example.com',
       notificationType: 'SHOP_ACCOUNT_ISSUED',
     })
+    expect(typeof resendArg.initialPasswordHash).toBe('string')
+    expect(resendArg.initialPasswordHash.length).toBeGreaterThan(0)
+
+    expect(sendShopAccountIssuedNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailNotificationLogId: 'log-1',
+        shopAccountId: VALID_UUID,
+        toEmail: 'a@example.com',
+        shopName: 'テストショップ',
+        contactName: '山田太郎',
+      }),
+    )
+    const sendArg = sendShopAccountIssuedNotification.mock.calls[0][0]
+    expect(typeof sendArg.temporaryPassword).toBe('string')
+    expect(sendArg.temporaryPassword.length).toBeGreaterThan(0)
+
     expect(recordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         actionType: 'SHOP_ACCOUNT_NOTIFICATION_RESEND',

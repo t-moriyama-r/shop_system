@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, or, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm'
 
 import { db } from './client'
 import { emailNotificationLogs, shopAccounts } from './schema'
@@ -138,6 +138,11 @@ export interface CreateShopAccountInput {
   issuedBySeAdminUserId: string
 }
 
+export interface CreateShopAccountResult {
+  account: ShopAccountListItem
+  emailNotificationLogId: string
+}
+
 /**
  * ショップアカウントを新規発行する。
  * shop_accounts への登録と、発行完了通知メールの PENDING レコード作成
@@ -147,7 +152,7 @@ export interface CreateShopAccountInput {
  */
 export async function createShopAccount(
   input: CreateShopAccountInput,
-): Promise<ShopAccountListItem> {
+): Promise<CreateShopAccountResult> {
   return db.transaction(async (tx) => {
     const [account] = await tx
       .insert(shopAccounts)
@@ -161,14 +166,17 @@ export async function createShopAccount(
       })
       .returning(publicColumns)
 
-    await tx.insert(emailNotificationLogs).values({
-      shopAccountId: account.shopAccountId,
-      toEmail: input.email,
-      notificationType: SHOP_ACCOUNT_ISSUED_NOTIFICATION,
-      sendStatus: 'PENDING',
-    })
+    const [log] = await tx
+      .insert(emailNotificationLogs)
+      .values({
+        shopAccountId: account.shopAccountId,
+        toEmail: input.email,
+        notificationType: SHOP_ACCOUNT_ISSUED_NOTIFICATION,
+        sendStatus: 'PENDING',
+      })
+      .returning({ emailNotificationLogId: emailNotificationLogs.emailNotificationLogId })
 
-    return account
+    return { account, emailNotificationLogId: log.emailNotificationLogId }
   })
 }
 
@@ -237,26 +245,80 @@ export async function listEmailNotificationLogsPage(
 }
 
 /**
- * 通知メールの再送信をトリガーする。email_notification_logs に新たな PENDING
- * レコードを作成する（API仕様書 項目11）。実際の送信は BP-005（メール送信処理、
- * 別Issue）が PENDING レコードを起点に非同期実行する。
+ * 通知メールの再送信をトリガーする。ショップの一時パスワードを再発行して
+ * shop_accounts.initial_password_hash を更新し、email_notification_logs に
+ * 新たな PENDING レコードを作成する（API仕様書 項目11）。
+ * 平文パスワードは呼び出し側でのみ保持し、実際の送信は BP-005（メール送信処理）が
+ * この PENDING レコードを起点に非同期実行する。
  */
 export async function createResendEmailNotificationLog(input: {
   shopAccountId: string
   toEmail: string
   notificationType: string
+  initialPasswordHash: string
 }): Promise<EmailNotificationLog> {
-  const [log] = await db
-    .insert(emailNotificationLogs)
-    .values({
-      shopAccountId: input.shopAccountId,
-      toEmail: input.toEmail,
-      notificationType: input.notificationType,
-      sendStatus: 'PENDING',
-    })
-    .returning()
+  return db.transaction(async (tx) => {
+    await tx
+      .update(shopAccounts)
+      .set({ initialPasswordHash: input.initialPasswordHash, updatedAt: new Date() })
+      .where(eq(shopAccounts.shopAccountId, input.shopAccountId))
 
-  return log
+    const [log] = await tx
+      .insert(emailNotificationLogs)
+      .values({
+        shopAccountId: input.shopAccountId,
+        toEmail: input.toEmail,
+        notificationType: input.notificationType,
+        sendStatus: 'PENDING',
+      })
+      .returning()
+
+    return log
+  })
+}
+
+export interface RecordEmailNotificationResultInput {
+  emailNotificationLogId: string
+  shopAccountId: string
+  status: 'SUCCESS' | 'FAILURE'
+  errorMessage?: string | null
+  now?: Date
+}
+
+/**
+ * メール送信結果を email_notification_logs に反映する（BP-005/BP-011）。
+ * 成功時は shop_accounts.notification_sent_at も更新する。失敗時は
+ * retry_count をインクリメントし、再送バッチ（別Issue）が対象を検出できるようにする。
+ */
+export async function recordEmailNotificationResult(
+  input: RecordEmailNotificationResultInput,
+): Promise<void> {
+  const now = input.now ?? new Date()
+
+  await db.transaction(async (tx) => {
+    if (input.status === 'SUCCESS') {
+      await tx
+        .update(emailNotificationLogs)
+        .set({ sendStatus: 'SUCCESS', sentAt: now, errorMessage: null, updatedAt: now })
+        .where(eq(emailNotificationLogs.emailNotificationLogId, input.emailNotificationLogId))
+
+      await tx
+        .update(shopAccounts)
+        .set({ notificationSentAt: now, updatedAt: now })
+        .where(eq(shopAccounts.shopAccountId, input.shopAccountId))
+      return
+    }
+
+    await tx
+      .update(emailNotificationLogs)
+      .set({
+        sendStatus: 'FAILURE',
+        errorMessage: input.errorMessage ?? '不明なエラー',
+        retryCount: sql`${emailNotificationLogs.retryCount} + 1`,
+        updatedAt: now,
+      })
+      .where(eq(emailNotificationLogs.emailNotificationLogId, input.emailNotificationLogId))
+  })
 }
 
 /**

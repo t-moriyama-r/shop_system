@@ -54,6 +54,7 @@ const {
   listEmailLogsByShopAccount,
   listEmailNotificationLogsPage,
   createResendEmailNotificationLog,
+  recordEmailNotificationResult,
   updateShopAccountStatus,
   isShopAccountStatus,
   SHOP_ACCOUNT_STATUSES,
@@ -113,7 +114,10 @@ describe('findShopAccountByEmail', () => {
 
 describe('createShopAccount', () => {
   it('inserts the account and a PENDING email log in one transaction', async () => {
-    h.state.returningQueue = [[{ shopAccountId: 's1', email: 'a@example.com' }]]
+    h.state.returningQueue = [
+      [{ shopAccountId: 's1', email: 'a@example.com' }],
+      [{ emailNotificationLogId: 'log-1' }],
+    ]
 
     const result = await createShopAccount({
       shopName: 'Shop',
@@ -123,7 +127,10 @@ describe('createShopAccount', () => {
       issuedBySeAdminUserId: 'op-1',
     })
 
-    expect(result).toMatchObject({ shopAccountId: 's1' })
+    expect(result).toMatchObject({
+      account: { shopAccountId: 's1' },
+      emailNotificationLogId: 'log-1',
+    })
     expect(h.state.insertTables).toEqual([shopAccounts, emailNotificationLogs])
 
     const accountValues = h.state.insertValues[0] as Record<string, unknown>
@@ -164,16 +171,19 @@ describe('listEmailNotificationLogsPage', () => {
 })
 
 describe('createResendEmailNotificationLog', () => {
-  it('inserts a new PENDING email notification log', async () => {
+  it('reissues the password hash and inserts a new PENDING email notification log', async () => {
     h.state.returningQueue = [[{ emailNotificationLogId: 'e2', sendStatus: 'PENDING' }]]
 
     const result = await createResendEmailNotificationLog({
       shopAccountId: 's1',
       toEmail: 'a@example.com',
       notificationType: 'SHOP_ACCOUNT_ISSUED',
+      initialPasswordHash: 'new-hashed',
     })
 
     expect(result).toMatchObject({ emailNotificationLogId: 'e2' })
+    expect(h.state.updateTables).toEqual([shopAccounts])
+    expect(h.state.updateSets[0]).toMatchObject({ initialPasswordHash: 'new-hashed' })
     expect(h.state.insertTables).toEqual([emailNotificationLogs])
     expect(h.state.insertValues[0]).toMatchObject({
       shopAccountId: 's1',
@@ -190,5 +200,43 @@ describe('updateShopAccountStatus', () => {
     expect(h.state.updateTables).toEqual([shopAccounts])
     expect(h.state.updateSets[0]).toMatchObject({ accountStatus: 'suspended' })
     expect(h.state.updateSets[0]).toHaveProperty('updatedAt')
+  })
+})
+
+describe('recordEmailNotificationResult', () => {
+  it('marks the log SUCCESS and stamps notificationSentAt on the account', async () => {
+    const now = new Date('2026-01-01T00:00:00Z')
+    await recordEmailNotificationResult({
+      emailNotificationLogId: 'log-1',
+      shopAccountId: 's1',
+      status: 'SUCCESS',
+      now,
+    })
+
+    expect(h.state.updateTables).toEqual([emailNotificationLogs, shopAccounts])
+    expect(h.state.updateSets[0]).toMatchObject({
+      sendStatus: 'SUCCESS',
+      sentAt: now,
+      errorMessage: null,
+    })
+    expect(h.state.updateSets[1]).toMatchObject({ notificationSentAt: now })
+  })
+
+  it('marks the log FAILURE, records the error, and increments retryCount', async () => {
+    const now = new Date('2026-01-01T00:00:00Z')
+    await recordEmailNotificationResult({
+      emailNotificationLogId: 'log-1',
+      shopAccountId: 's1',
+      status: 'FAILURE',
+      errorMessage: 'SES timeout',
+      now,
+    })
+
+    expect(h.state.updateTables).toEqual([emailNotificationLogs])
+    expect(h.state.updateSets[0]).toMatchObject({
+      sendStatus: 'FAILURE',
+      errorMessage: 'SES timeout',
+    })
+    expect(h.state.updateSets[0]).toHaveProperty('retryCount')
   })
 })
