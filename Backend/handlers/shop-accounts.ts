@@ -13,6 +13,7 @@ import {
   SHOP_ACCOUNT_STATUSES,
   updateShopAccountStatus,
 } from 'db/shop-accounts'
+import type { ShopAccountStatus } from 'db/shop-accounts'
 import { recordAuditLog } from '../lib/audit-log'
 import { sendShopAccountIssuedNotification } from '../lib/email/notify'
 import { buildPagination, parsePositiveInt } from '../lib/pagination'
@@ -28,22 +29,6 @@ const BCRYPT_SALT_ROUNDS = 10
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-// 発行時に付与する一時パスワードを生成する。平文はメール本文でのみ利用され、
-// DB にはハッシュ値のみを保存する（設計 BP-003 備考）。
-function generateInitialPassword(): string {
-  return crypto.randomBytes(18).toString('base64url')
-}
-
-// 発行完了通知メールの送信をトリガーする。BP-005/BP-011 の設計どおり非同期
-// （fire-and-forget）で実行し、HTTPレスポンスをブロックしない。
-function triggerShopAccountIssuedNotification(
-  params: Parameters<typeof sendShopAccountIssuedNotification>[0],
-): void {
-  void sendShopAccountIssuedNotification(params).catch((err) => {
-    console.error('通知メールの送信処理でエラーが発生しました', err)
-  })
-}
 
 const STATUS_ERROR = `status は ${SHOP_ACCOUNT_STATUSES.join(' / ')} のいずれかで指定してください`
 
@@ -65,24 +50,14 @@ export async function listShopAccountsHandler(input: ListShopAccountsInput): Pro
     return { status: 400, body: { error: STATUS_ERROR } }
   }
 
-  const keyword = input.keyword?.trim()
-
-  const { rows, total } = await listShopAccounts({
-    keyword: keyword || undefined,
-    status: statusRaw && isShopAccountStatus(statusRaw) ? statusRaw : undefined,
-    includeDeleted: input.includeDeleted === 'true',
-    sort: input.sort,
+  return listShopAccountsService({
     page,
     limit,
+    status: statusRaw && isShopAccountStatus(statusRaw) ? statusRaw : undefined,
+    keyword: input.keyword?.trim(),
+    includeDeleted: input.includeDeleted === 'true',
+    sort: input.sort,
   })
-
-  return {
-    status: 200,
-    body: {
-      data: rows,
-      pagination: buildPagination(page, limit, total),
-    },
-  }
 }
 
 export interface CreateShopAccountInput {
@@ -121,46 +96,13 @@ export async function createShopAccountHandler(
     return { status: 400, body: { error: 'メールアドレスの形式が正しくありません' } }
   }
 
-  const existing = await findShopAccountByEmail(email.value)
-  if (existing) {
-    return { status: 409, body: { error: 'このメールアドレスは既に登録されています' } }
-  }
-
-  const temporaryPassword = generateInitialPassword()
-  const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
-
-  const { account, emailNotificationLogId } = await createShopAccount({
+  return createShopAccountService({
     shopName: shopName.value,
     contactName: contactName.value,
     email: email.value,
-    initialPasswordHash,
-    issuedBySeAdminUserId: input.operator.seAdminUserId,
+    operator: input.operator,
+    meta: input.meta,
   })
-
-  triggerShopAccountIssuedNotification({
-    emailNotificationLogId,
-    shopAccountId: account.shopAccountId,
-    toEmail: account.email,
-    shopName: account.shopName,
-    contactName: account.contactName,
-    temporaryPassword,
-  })
-
-  await recordAuditLog({
-    operatorType: 'se_admin',
-    seAdminUserId: input.operator.seAdminUserId,
-    actionType: 'SHOP_ACCOUNT_CREATE',
-    targetType: 'shop_account',
-    targetId: account.shopAccountId,
-    result: 'SUCCESS',
-    detail: `ショップアカウント(${account.email})を発行`,
-    ...input.meta,
-  })
-
-  return {
-    status: 201,
-    body: { message: 'ショップアカウントを発行しました', shopAccount: account },
-  }
 }
 
 export interface GetShopAccountInput {
@@ -172,14 +114,7 @@ export async function getShopAccountHandler(input: GetShopAccountInput): Promise
     return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
   }
 
-  const account = await findShopAccountById(input.shopAccountId)
-  if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
-  }
-
-  const emailNotificationLogs = await listEmailLogsByShopAccount(input.shopAccountId)
-
-  return { status: 200, body: { ...account, emailNotificationLogs } }
+  return getShopAccountService(input.shopAccountId)
 }
 
 export interface UpdateShopAccountStatusInput {
@@ -198,30 +133,13 @@ export async function updateShopAccountStatusHandler(
   if (typeof input.status !== 'string' || !isShopAccountStatus(input.status)) {
     return { status: 400, body: { error: STATUS_ERROR } }
   }
-  const status = input.status
 
-  const account = await findShopAccountById(input.shopAccountId)
-  if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
-  }
-
-  await updateShopAccountStatus(input.shopAccountId, status)
-
-  await recordAuditLog({
-    operatorType: 'se_admin',
-    seAdminUserId: input.operator.seAdminUserId,
-    actionType: 'SHOP_ACCOUNT_STATUS_UPDATE',
-    targetType: 'shop_account',
-    targetId: input.shopAccountId,
-    result: 'SUCCESS',
-    detail: `ショップアカウント(${account.email})のステータスを ${account.accountStatus} → ${status} に変更`,
-    ...input.meta,
+  return updateShopAccountStatusService({
+    shopAccountId: input.shopAccountId,
+    status: input.status,
+    operator: input.operator,
+    meta: input.meta,
   })
-
-  return {
-    status: 200,
-    body: { message: 'ショップアカウントのステータスを更新しました', accountStatus: status },
-  }
 }
 
 export interface ListNotificationLogsInput {
@@ -237,27 +155,10 @@ export async function listNotificationLogsHandler(
     return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
   }
 
-  const account = await findShopAccountById(input.shopAccountId)
-  if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
-  }
-
   const page = parsePositiveInt(input.page, DEFAULT_PAGE)
   const limit = parsePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT)
 
-  const { rows, total } = await listEmailNotificationLogsPage({
-    shopAccountId: input.shopAccountId,
-    page,
-    limit,
-  })
-
-  return {
-    status: 200,
-    body: {
-      data: rows,
-      pagination: buildPagination(page, limit, total),
-    },
-  }
+  return listNotificationLogsService({ shopAccountId: input.shopAccountId, page, limit })
 }
 
 export interface ResendNotificationInput {
@@ -273,7 +174,152 @@ export async function resendNotificationHandler(
     return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
   }
 
-  const account = await findShopAccountById(input.shopAccountId)
+  return resendNotificationService(input)
+}
+
+async function listShopAccountsService(params: {
+  page: number
+  limit: number
+  status?: ShopAccountStatus
+  keyword?: string
+  includeDeleted: boolean
+  sort?: string
+}): Promise<HandlerResult> {
+  const { rows, total } = await listShopAccounts({
+    keyword: params.keyword || undefined,
+    status: params.status,
+    includeDeleted: params.includeDeleted,
+    sort: params.sort,
+    page: params.page,
+    limit: params.limit,
+  })
+
+  return {
+    status: 200,
+    body: {
+      data: rows,
+      pagination: buildPagination(params.page, params.limit, total),
+    },
+  }
+}
+
+async function createShopAccountService(params: {
+  shopName: string
+  contactName: string
+  email: string
+  operator: AuthUser
+  meta: ClientMeta
+}): Promise<HandlerResult> {
+  const existing = await findShopAccountByEmail(params.email)
+  if (existing) {
+    return { status: 409, body: { error: 'このメールアドレスは既に登録されています' } }
+  }
+
+  const temporaryPassword = generateInitialPassword()
+  const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
+
+  const { account, emailNotificationLogId } = await createShopAccount({
+    shopName: params.shopName,
+    contactName: params.contactName,
+    email: params.email,
+    initialPasswordHash,
+    issuedBySeAdminUserId: params.operator.seAdminUserId,
+  })
+
+  triggerShopAccountIssuedNotification({
+    emailNotificationLogId,
+    shopAccountId: account.shopAccountId,
+    toEmail: account.email,
+    shopName: account.shopName,
+    contactName: account.contactName,
+    temporaryPassword,
+  })
+
+  await recordAuditLog({
+    operatorType: 'se_admin',
+    seAdminUserId: params.operator.seAdminUserId,
+    actionType: 'SHOP_ACCOUNT_CREATE',
+    targetType: 'shop_account',
+    targetId: account.shopAccountId,
+    result: 'SUCCESS',
+    detail: `ショップアカウント(${account.email})を発行`,
+    ...params.meta,
+  })
+
+  return {
+    status: 201,
+    body: { message: 'ショップアカウントを発行しました', shopAccount: account },
+  }
+}
+
+async function getShopAccountService(shopAccountId: string): Promise<HandlerResult> {
+  const account = await findShopAccountById(shopAccountId)
+  if (!account) {
+    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+  }
+
+  const emailNotificationLogs = await listEmailLogsByShopAccount(shopAccountId)
+
+  return { status: 200, body: { ...account, emailNotificationLogs } }
+}
+
+async function updateShopAccountStatusService(params: {
+  shopAccountId: string
+  status: ShopAccountStatus
+  operator: AuthUser
+  meta: ClientMeta
+}): Promise<HandlerResult> {
+  const account = await findShopAccountById(params.shopAccountId)
+  if (!account) {
+    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+  }
+
+  await updateShopAccountStatus(params.shopAccountId, params.status)
+
+  await recordAuditLog({
+    operatorType: 'se_admin',
+    seAdminUserId: params.operator.seAdminUserId,
+    actionType: 'SHOP_ACCOUNT_STATUS_UPDATE',
+    targetType: 'shop_account',
+    targetId: params.shopAccountId,
+    result: 'SUCCESS',
+    detail: `ショップアカウント(${account.email})のステータスを ${account.accountStatus} → ${params.status} に変更`,
+    ...params.meta,
+  })
+
+  return {
+    status: 200,
+    body: { message: 'ショップアカウントのステータスを更新しました', accountStatus: params.status },
+  }
+}
+
+async function listNotificationLogsService(params: {
+  shopAccountId: string
+  page: number
+  limit: number
+}): Promise<HandlerResult> {
+  const account = await findShopAccountById(params.shopAccountId)
+  if (!account) {
+    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+  }
+
+  const { rows, total } = await listEmailNotificationLogsPage({
+    shopAccountId: params.shopAccountId,
+    page: params.page,
+    limit: params.limit,
+  })
+
+  return {
+    status: 200,
+    body: {
+      data: rows,
+      pagination: buildPagination(params.page, params.limit, total),
+    },
+  }
+}
+
+async function resendNotificationService(params: ResendNotificationInput): Promise<HandlerResult> {
+  const account = await findShopAccountById(params.shopAccountId)
   if (!account) {
     return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
   }
@@ -283,7 +329,7 @@ export async function resendNotificationHandler(
   const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
 
   const log = await createResendEmailNotificationLog({
-    shopAccountId: input.shopAccountId,
+    shopAccountId: params.shopAccountId,
     toEmail: account.email,
     notificationType: SHOP_ACCOUNT_ISSUED_NOTIFICATION,
     initialPasswordHash,
@@ -291,7 +337,7 @@ export async function resendNotificationHandler(
 
   triggerShopAccountIssuedNotification({
     emailNotificationLogId: log.emailNotificationLogId,
-    shopAccountId: input.shopAccountId,
+    shopAccountId: params.shopAccountId,
     toEmail: account.email,
     shopName: account.shopName,
     contactName: account.contactName,
@@ -300,17 +346,33 @@ export async function resendNotificationHandler(
 
   await recordAuditLog({
     operatorType: 'se_admin',
-    seAdminUserId: input.operator.seAdminUserId,
+    seAdminUserId: params.operator.seAdminUserId,
     actionType: 'SHOP_ACCOUNT_NOTIFICATION_RESEND',
     targetType: 'shop_account',
-    targetId: input.shopAccountId,
+    targetId: params.shopAccountId,
     result: 'SUCCESS',
     detail: `ショップアカウント(${account.email})の通知メール再送信をトリガー`,
-    ...input.meta,
+    ...params.meta,
   })
 
   return {
     status: 200,
     body: { message: '通知メールの再送信をトリガーしました', emailNotificationLog: log },
   }
+}
+
+// 発行時に付与する一時パスワードを生成する。平文はメール本文でのみ利用され、
+// DB にはハッシュ値のみを保存する（設計 BP-003 備考）。
+function generateInitialPassword(): string {
+  return crypto.randomBytes(18).toString('base64url')
+}
+
+// 発行完了通知メールの送信をトリガーする。BP-005/BP-011 の設計どおり非同期
+// （fire-and-forget）で実行し、HTTPレスポンスをブロックしない。
+function triggerShopAccountIssuedNotification(
+  params: Parameters<typeof sendShopAccountIssuedNotification>[0],
+): void {
+  void sendShopAccountIssuedNotification(params).catch((err) => {
+    console.error('通知メールの送信処理でエラーが発生しました', err)
+  })
 }
