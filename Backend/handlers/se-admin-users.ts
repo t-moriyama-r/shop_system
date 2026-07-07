@@ -7,7 +7,8 @@ import {
 import { recordAuditLog } from '../lib/audit-log'
 import { buildPagination, parsePositiveInt } from '../lib/pagination'
 import type { AuthUser } from '../middleware/auth'
-import type { ClientMeta, HandlerResult } from './types'
+import type { ClientMeta, HandlerResult, ServiceResult } from './types'
+import { serviceErrorResult } from './types'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -30,7 +31,16 @@ export async function listSeAdminUsersHandler(
   const isLocked =
     input.isLocked === 'true' ? true : input.isLocked === 'false' ? false : undefined
 
-  return listSeAdminUsersService({ page, limit, keyword, isLocked, sort: input.sort })
+  const result = await listSeAdminUsersService({ page, limit, keyword, isLocked, sort: input.sort })
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 200,
+    body: {
+      data: result.data.rows,
+      pagination: buildPagination(page, limit, result.data.total),
+    },
+  }
 }
 
 export interface DeleteSeAdminUserInput {
@@ -42,7 +52,14 @@ export interface DeleteSeAdminUserInput {
 export async function deleteSeAdminUserHandler(
   input: DeleteSeAdminUserInput,
 ): Promise<HandlerResult> {
-  return deleteSeAdminUserService(input)
+  if (input.targetId === input.operator.seAdminUserId) {
+    return { status: 403, body: { error: '自分自身のアカウントは削除できません' } }
+  }
+
+  const result = await deleteSeAdminUserService(input)
+  if (!result.ok) return serviceErrorResult(result)
+
+  return { status: 200, body: { message: 'SE管理者アカウントを削除しました' } }
 }
 
 export interface SetSeAdminLockInput {
@@ -57,12 +74,21 @@ export async function setSeAdminLockHandler(input: SetSeAdminLockInput): Promise
     return { status: 400, body: { error: 'isLockedは真偽値で指定してください' } }
   }
 
-  return setSeAdminLockService({
+  const result = await setSeAdminLockService({
     targetId: input.targetId,
     operator: input.operator,
     isLocked: input.isLocked,
     meta: input.meta,
   })
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 200,
+    body: {
+      message: result.data.isLocked ? 'アカウントをロックしました' : 'アカウントのロックを解除しました',
+      isLocked: result.data.isLocked,
+    },
+  }
 }
 
 async function listSeAdminUsersService(params: {
@@ -71,7 +97,9 @@ async function listSeAdminUsersService(params: {
   keyword?: string
   isLocked?: boolean
   sort?: string
-}): Promise<HandlerResult> {
+}): Promise<
+  ServiceResult<{ rows: Awaited<ReturnType<typeof listSeAdminUsers>>['rows']; total: number }>
+> {
   const { rows, total } = await listSeAdminUsers({
     keyword: params.keyword || undefined,
     isLocked: params.isLocked,
@@ -80,25 +108,15 @@ async function listSeAdminUsersService(params: {
     limit: params.limit,
   })
 
-  return {
-    status: 200,
-    body: {
-      data: rows,
-      pagination: buildPagination(params.page, params.limit, total),
-    },
-  }
+  return { ok: true, data: { rows, total } }
 }
 
-async function deleteSeAdminUserService(params: DeleteSeAdminUserInput): Promise<HandlerResult> {
+async function deleteSeAdminUserService(params: DeleteSeAdminUserInput): Promise<ServiceResult<null>> {
   const { targetId, operator, meta } = params
-
-  if (targetId === operator.seAdminUserId) {
-    return { status: 403, body: { error: '自分自身のアカウントは削除できません' } }
-  }
 
   const target = await findActiveSeAdminById(targetId)
   if (!target) {
-    return { status: 404, body: { error: '対象のSE管理者アカウントが見つかりません' } }
+    return { ok: false, reason: 'not_found', message: '対象のSE管理者アカウントが見つかりません' }
   }
 
   await softDeleteSeAdminUser(targetId)
@@ -114,7 +132,7 @@ async function deleteSeAdminUserService(params: DeleteSeAdminUserInput): Promise
     ...meta,
   })
 
-  return { status: 200, body: { message: 'SE管理者アカウントを削除しました' } }
+  return { ok: true, data: null }
 }
 
 async function setSeAdminLockService(params: {
@@ -122,12 +140,12 @@ async function setSeAdminLockService(params: {
   operator: AuthUser
   isLocked: boolean
   meta: ClientMeta
-}): Promise<HandlerResult> {
+}): Promise<ServiceResult<{ isLocked: boolean }>> {
   const { targetId, operator, isLocked, meta } = params
 
   const target = await findActiveSeAdminById(targetId)
   if (!target) {
-    return { status: 404, body: { error: '対象のSE管理者アカウントが見つかりません' } }
+    return { ok: false, reason: 'not_found', message: '対象のSE管理者アカウントが見つかりません' }
   }
 
   await setSeAdminLock(targetId, isLocked)
@@ -145,11 +163,5 @@ async function setSeAdminLockService(params: {
     ...meta,
   })
 
-  return {
-    status: 200,
-    body: {
-      message: isLocked ? 'アカウントをロックしました' : 'アカウントのロックを解除しました',
-      isLocked,
-    },
-  }
+  return { ok: true, data: { isLocked } }
 }

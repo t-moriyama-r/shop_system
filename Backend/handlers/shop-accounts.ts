@@ -18,7 +18,8 @@ import { recordAuditLog } from '../lib/audit-log'
 import { sendShopAccountIssuedNotification } from '../lib/email/notify'
 import { buildPagination, parsePositiveInt } from '../lib/pagination'
 import type { AuthUser } from '../middleware/auth'
-import type { ClientMeta, HandlerResult } from './types'
+import type { ClientMeta, HandlerResult, ServiceResult } from './types'
+import { serviceErrorResult } from './types'
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20
@@ -50,7 +51,7 @@ export async function listShopAccountsHandler(input: ListShopAccountsInput): Pro
     return { status: 400, body: { error: STATUS_ERROR } }
   }
 
-  return listShopAccountsService({
+  const result = await listShopAccountsService({
     page,
     limit,
     status: statusRaw && isShopAccountStatus(statusRaw) ? statusRaw : undefined,
@@ -58,6 +59,15 @@ export async function listShopAccountsHandler(input: ListShopAccountsInput): Pro
     includeDeleted: input.includeDeleted === 'true',
     sort: input.sort,
   })
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 200,
+    body: {
+      data: result.data.rows,
+      pagination: buildPagination(page, limit, result.data.total),
+    },
+  }
 }
 
 export interface CreateShopAccountInput {
@@ -96,13 +106,19 @@ export async function createShopAccountHandler(
     return { status: 400, body: { error: 'メールアドレスの形式が正しくありません' } }
   }
 
-  return createShopAccountService({
+  const result = await createShopAccountService({
     shopName: shopName.value,
     contactName: contactName.value,
     email: email.value,
     operator: input.operator,
     meta: input.meta,
   })
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 201,
+    body: { message: 'ショップアカウントを発行しました', shopAccount: result.data.account },
+  }
 }
 
 export interface GetShopAccountInput {
@@ -114,7 +130,10 @@ export async function getShopAccountHandler(input: GetShopAccountInput): Promise
     return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
   }
 
-  return getShopAccountService(input.shopAccountId)
+  const result = await getShopAccountService(input.shopAccountId)
+  if (!result.ok) return serviceErrorResult(result)
+
+  return { status: 200, body: { ...result.data.account, emailNotificationLogs: result.data.emailNotificationLogs } }
 }
 
 export interface UpdateShopAccountStatusInput {
@@ -134,12 +153,18 @@ export async function updateShopAccountStatusHandler(
     return { status: 400, body: { error: STATUS_ERROR } }
   }
 
-  return updateShopAccountStatusService({
+  const result = await updateShopAccountStatusService({
     shopAccountId: input.shopAccountId,
     status: input.status,
     operator: input.operator,
     meta: input.meta,
   })
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 200,
+    body: { message: 'ショップアカウントのステータスを更新しました', accountStatus: result.data.accountStatus },
+  }
 }
 
 export interface ListNotificationLogsInput {
@@ -158,7 +183,16 @@ export async function listNotificationLogsHandler(
   const page = parsePositiveInt(input.page, DEFAULT_PAGE)
   const limit = parsePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT)
 
-  return listNotificationLogsService({ shopAccountId: input.shopAccountId, page, limit })
+  const result = await listNotificationLogsService({ shopAccountId: input.shopAccountId, page, limit })
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 200,
+    body: {
+      data: result.data.rows,
+      pagination: buildPagination(page, limit, result.data.total),
+    },
+  }
 }
 
 export interface ResendNotificationInput {
@@ -174,7 +208,13 @@ export async function resendNotificationHandler(
     return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
   }
 
-  return resendNotificationService(input)
+  const result = await resendNotificationService(input)
+  if (!result.ok) return serviceErrorResult(result)
+
+  return {
+    status: 200,
+    body: { message: '通知メールの再送信をトリガーしました', emailNotificationLog: result.data.log },
+  }
 }
 
 async function listShopAccountsService(params: {
@@ -184,7 +224,7 @@ async function listShopAccountsService(params: {
   keyword?: string
   includeDeleted: boolean
   sort?: string
-}): Promise<HandlerResult> {
+}): Promise<ServiceResult<{ rows: Awaited<ReturnType<typeof listShopAccounts>>['rows']; total: number }>> {
   const { rows, total } = await listShopAccounts({
     keyword: params.keyword || undefined,
     status: params.status,
@@ -194,13 +234,7 @@ async function listShopAccountsService(params: {
     limit: params.limit,
   })
 
-  return {
-    status: 200,
-    body: {
-      data: rows,
-      pagination: buildPagination(params.page, params.limit, total),
-    },
-  }
+  return { ok: true, data: { rows, total } }
 }
 
 async function createShopAccountService(params: {
@@ -209,10 +243,10 @@ async function createShopAccountService(params: {
   email: string
   operator: AuthUser
   meta: ClientMeta
-}): Promise<HandlerResult> {
+}): Promise<ServiceResult<{ account: Awaited<ReturnType<typeof createShopAccount>>['account'] }>> {
   const existing = await findShopAccountByEmail(params.email)
   if (existing) {
-    return { status: 409, body: { error: 'このメールアドレスは既に登録されています' } }
+    return { ok: false, reason: 'conflict', message: 'このメールアドレスは既に登録されています' }
   }
 
   const temporaryPassword = generateInitialPassword()
@@ -246,21 +280,25 @@ async function createShopAccountService(params: {
     ...params.meta,
   })
 
-  return {
-    status: 201,
-    body: { message: 'ショップアカウントを発行しました', shopAccount: account },
-  }
+  return { ok: true, data: { account } }
 }
 
-async function getShopAccountService(shopAccountId: string): Promise<HandlerResult> {
+async function getShopAccountService(
+  shopAccountId: string,
+): Promise<
+  ServiceResult<{
+    account: NonNullable<Awaited<ReturnType<typeof findShopAccountById>>>
+    emailNotificationLogs: Awaited<ReturnType<typeof listEmailLogsByShopAccount>>
+  }>
+> {
   const account = await findShopAccountById(shopAccountId)
   if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+    return { ok: false, reason: 'not_found', message: '対象のショップアカウントが見つかりません' }
   }
 
   const emailNotificationLogs = await listEmailLogsByShopAccount(shopAccountId)
 
-  return { status: 200, body: { ...account, emailNotificationLogs } }
+  return { ok: true, data: { account, emailNotificationLogs } }
 }
 
 async function updateShopAccountStatusService(params: {
@@ -268,10 +306,10 @@ async function updateShopAccountStatusService(params: {
   status: ShopAccountStatus
   operator: AuthUser
   meta: ClientMeta
-}): Promise<HandlerResult> {
+}): Promise<ServiceResult<{ accountStatus: ShopAccountStatus }>> {
   const account = await findShopAccountById(params.shopAccountId)
   if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+    return { ok: false, reason: 'not_found', message: '対象のショップアカウントが見つかりません' }
   }
 
   await updateShopAccountStatus(params.shopAccountId, params.status)
@@ -287,20 +325,22 @@ async function updateShopAccountStatusService(params: {
     ...params.meta,
   })
 
-  return {
-    status: 200,
-    body: { message: 'ショップアカウントのステータスを更新しました', accountStatus: params.status },
-  }
+  return { ok: true, data: { accountStatus: params.status } }
 }
 
 async function listNotificationLogsService(params: {
   shopAccountId: string
   page: number
   limit: number
-}): Promise<HandlerResult> {
+}): Promise<
+  ServiceResult<{
+    rows: Awaited<ReturnType<typeof listEmailNotificationLogsPage>>['rows']
+    total: number
+  }>
+> {
   const account = await findShopAccountById(params.shopAccountId)
   if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+    return { ok: false, reason: 'not_found', message: '対象のショップアカウントが見つかりません' }
   }
 
   const { rows, total } = await listEmailNotificationLogsPage({
@@ -309,19 +349,15 @@ async function listNotificationLogsService(params: {
     limit: params.limit,
   })
 
-  return {
-    status: 200,
-    body: {
-      data: rows,
-      pagination: buildPagination(params.page, params.limit, total),
-    },
-  }
+  return { ok: true, data: { rows, total } }
 }
 
-async function resendNotificationService(params: ResendNotificationInput): Promise<HandlerResult> {
+async function resendNotificationService(
+  params: ResendNotificationInput,
+): Promise<ServiceResult<{ log: Awaited<ReturnType<typeof createResendEmailNotificationLog>> }>> {
   const account = await findShopAccountById(params.shopAccountId)
   if (!account) {
-    return { status: 404, body: { error: '対象のショップアカウントが見つかりません' } }
+    return { ok: false, reason: 'not_found', message: '対象のショップアカウントが見つかりません' }
   }
 
   // 再送信時は新しい一時パスワードを発行し直す。
@@ -355,10 +391,7 @@ async function resendNotificationService(params: ResendNotificationInput): Promi
     ...params.meta,
   })
 
-  return {
-    status: 200,
-    body: { message: '通知メールの再送信をトリガーしました', emailNotificationLog: log },
-  }
+  return { ok: true, data: { log } }
 }
 
 // 発行時に付与する一時パスワードを生成する。平文はメール本文でのみ利用され、
