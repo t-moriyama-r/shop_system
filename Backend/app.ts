@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
+import { captureException } from './lib/sentry'
 import { auth } from './routes/auth'
 import { seAdminUsersRoute } from './routes/se-admin-users'
 import { auditLogsRoute } from './routes/audit-logs'
@@ -26,6 +27,7 @@ app.onError((err, c) => {
     return c.json({ error: err.message }, err.status)
   }
   console.error('Unhandled error:', err)
+  captureException(err)
   return c.json({ error: 'Internal Server Error' }, 500)
 })
 

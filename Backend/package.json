@@ -18,6 +18,7 @@
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1079.0",
     "@hono/node-server": "^1.13.7",
+    "@sentry/node": "^10.63.0",
     "bcrypt": "^6.0.0",
     "db": "workspace:*",
     "drizzle-orm": "^0.45.2",
