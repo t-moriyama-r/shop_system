@@ -60,32 +60,6 @@ export async function listShopAccountsHandler(input: ListShopAccountsInput): Pro
   })
 }
 
-async function listShopAccountsService(params: {
-  page: number
-  limit: number
-  status?: ShopAccountStatus
-  keyword?: string
-  includeDeleted: boolean
-  sort?: string
-}): Promise<HandlerResult> {
-  const { rows, total } = await listShopAccounts({
-    keyword: params.keyword || undefined,
-    status: params.status,
-    includeDeleted: params.includeDeleted,
-    sort: params.sort,
-    page: params.page,
-    limit: params.limit,
-  })
-
-  return {
-    status: 200,
-    body: {
-      data: rows,
-      pagination: buildPagination(params.page, params.limit, total),
-    },
-  }
-}
-
 export interface CreateShopAccountInput {
   shopName: unknown
   contactName: unknown
@@ -129,6 +103,104 @@ export async function createShopAccountHandler(
     operator: input.operator,
     meta: input.meta,
   })
+}
+
+export interface GetShopAccountInput {
+  shopAccountId: string
+}
+
+export async function getShopAccountHandler(input: GetShopAccountInput): Promise<HandlerResult> {
+  if (!UUID_PATTERN.test(input.shopAccountId)) {
+    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
+  }
+
+  return getShopAccountService(input.shopAccountId)
+}
+
+export interface UpdateShopAccountStatusInput {
+  shopAccountId: string
+  operator: AuthUser
+  status: unknown
+  meta: ClientMeta
+}
+
+export async function updateShopAccountStatusHandler(
+  input: UpdateShopAccountStatusInput,
+): Promise<HandlerResult> {
+  if (!UUID_PATTERN.test(input.shopAccountId)) {
+    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
+  }
+  if (typeof input.status !== 'string' || !isShopAccountStatus(input.status)) {
+    return { status: 400, body: { error: STATUS_ERROR } }
+  }
+
+  return updateShopAccountStatusService({
+    shopAccountId: input.shopAccountId,
+    status: input.status,
+    operator: input.operator,
+    meta: input.meta,
+  })
+}
+
+export interface ListNotificationLogsInput {
+  shopAccountId: string
+  page?: string
+  limit?: string
+}
+
+export async function listNotificationLogsHandler(
+  input: ListNotificationLogsInput,
+): Promise<HandlerResult> {
+  if (!UUID_PATTERN.test(input.shopAccountId)) {
+    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
+  }
+
+  const page = parsePositiveInt(input.page, DEFAULT_PAGE)
+  const limit = parsePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT)
+
+  return listNotificationLogsService({ shopAccountId: input.shopAccountId, page, limit })
+}
+
+export interface ResendNotificationInput {
+  shopAccountId: string
+  operator: AuthUser
+  meta: ClientMeta
+}
+
+export async function resendNotificationHandler(
+  input: ResendNotificationInput,
+): Promise<HandlerResult> {
+  if (!UUID_PATTERN.test(input.shopAccountId)) {
+    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
+  }
+
+  return resendNotificationService(input)
+}
+
+async function listShopAccountsService(params: {
+  page: number
+  limit: number
+  status?: ShopAccountStatus
+  keyword?: string
+  includeDeleted: boolean
+  sort?: string
+}): Promise<HandlerResult> {
+  const { rows, total } = await listShopAccounts({
+    keyword: params.keyword || undefined,
+    status: params.status,
+    includeDeleted: params.includeDeleted,
+    sort: params.sort,
+    page: params.page,
+    limit: params.limit,
+  })
+
+  return {
+    status: 200,
+    body: {
+      data: rows,
+      pagination: buildPagination(params.page, params.limit, total),
+    },
+  }
 }
 
 async function createShopAccountService(params: {
@@ -180,18 +252,6 @@ async function createShopAccountService(params: {
   }
 }
 
-export interface GetShopAccountInput {
-  shopAccountId: string
-}
-
-export async function getShopAccountHandler(input: GetShopAccountInput): Promise<HandlerResult> {
-  if (!UUID_PATTERN.test(input.shopAccountId)) {
-    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
-  }
-
-  return getShopAccountService(input.shopAccountId)
-}
-
 async function getShopAccountService(shopAccountId: string): Promise<HandlerResult> {
   const account = await findShopAccountById(shopAccountId)
   if (!account) {
@@ -201,31 +261,6 @@ async function getShopAccountService(shopAccountId: string): Promise<HandlerResu
   const emailNotificationLogs = await listEmailLogsByShopAccount(shopAccountId)
 
   return { status: 200, body: { ...account, emailNotificationLogs } }
-}
-
-export interface UpdateShopAccountStatusInput {
-  shopAccountId: string
-  operator: AuthUser
-  status: unknown
-  meta: ClientMeta
-}
-
-export async function updateShopAccountStatusHandler(
-  input: UpdateShopAccountStatusInput,
-): Promise<HandlerResult> {
-  if (!UUID_PATTERN.test(input.shopAccountId)) {
-    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
-  }
-  if (typeof input.status !== 'string' || !isShopAccountStatus(input.status)) {
-    return { status: 400, body: { error: STATUS_ERROR } }
-  }
-
-  return updateShopAccountStatusService({
-    shopAccountId: input.shopAccountId,
-    status: input.status,
-    operator: input.operator,
-    meta: input.meta,
-  })
 }
 
 async function updateShopAccountStatusService(params: {
@@ -258,25 +293,6 @@ async function updateShopAccountStatusService(params: {
   }
 }
 
-export interface ListNotificationLogsInput {
-  shopAccountId: string
-  page?: string
-  limit?: string
-}
-
-export async function listNotificationLogsHandler(
-  input: ListNotificationLogsInput,
-): Promise<HandlerResult> {
-  if (!UUID_PATTERN.test(input.shopAccountId)) {
-    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
-  }
-
-  const page = parsePositiveInt(input.page, DEFAULT_PAGE)
-  const limit = parsePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT)
-
-  return listNotificationLogsService({ shopAccountId: input.shopAccountId, page, limit })
-}
-
 async function listNotificationLogsService(params: {
   shopAccountId: string
   page: number
@@ -300,22 +316,6 @@ async function listNotificationLogsService(params: {
       pagination: buildPagination(params.page, params.limit, total),
     },
   }
-}
-
-export interface ResendNotificationInput {
-  shopAccountId: string
-  operator: AuthUser
-  meta: ClientMeta
-}
-
-export async function resendNotificationHandler(
-  input: ResendNotificationInput,
-): Promise<HandlerResult> {
-  if (!UUID_PATTERN.test(input.shopAccountId)) {
-    return { status: 400, body: { error: 'shopAccountId はUUID形式で指定してください' } }
-  }
-
-  return resendNotificationService(input)
 }
 
 async function resendNotificationService(params: ResendNotificationInput): Promise<HandlerResult> {

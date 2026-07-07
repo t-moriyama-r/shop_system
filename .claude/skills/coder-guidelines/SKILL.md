@@ -56,6 +56,13 @@ Backend は次の3層に分ける。route ハンドラ（`Backend/routes/*.ts` �
 
 > セッションID の採番のように「HTTP ではないがドメインの一部」の処理は handler 側で行い（`issueSession`）、その結果（Cookie に載せる値）を `HandlerResult.cookie` で route に返して route が Set-Cookie する。生成と Cookie 反映で層をまたぐ値は、handler が生成 → route が反映、の向きに統一する。
 
+### handler ファイル内の定義順序（エントリーポイントを先頭に）
+
+1つの `Backend/handlers/*.ts` の中で、ビジネスロジックが厚くなる場合は export する `xxxHandler`（検証のみを担うエントリーポイント）と、非export の `xxxService`（DBの存在チェック・書き込み・通知トリガー・監査ログ記録などのオーケストレーション）に分けてよい。その場合、**ファイル内では全ての `xxxHandler` を先頭にまとめ、`xxxService` 群はその後（ファイル下部）にまとめる**。ファイルは上から読まれるものなので、外部から呼ばれるエントリーポイント（＝そのファイルが何を公開しているか）が先に目に入るようにする。`function` 宣言は巻き上げられるため、handler が下部の service を先に参照しても問題ない。
+
+- NG: `handlerA` → `serviceA` → `handlerB` → `serviceB` のように handler と service を1組ずつ交互に並べる
+- OK: `handlerA` → `handlerB` → ... → `serviceA` → `serviceB` ...（対応する `Input` 型は各 handler の直上に置く）
+
 ## フロントエンド（Next.js / React）実装規約
 
 `Front/` の実装では以下を守る。`app/admin/accounts/` を基準実装として参照する。

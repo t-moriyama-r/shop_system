@@ -33,6 +33,38 @@ export async function listSeAdminUsersHandler(
   return listSeAdminUsersService({ page, limit, keyword, isLocked, sort: input.sort })
 }
 
+export interface DeleteSeAdminUserInput {
+  targetId: string
+  operator: AuthUser
+  meta: ClientMeta
+}
+
+export async function deleteSeAdminUserHandler(
+  input: DeleteSeAdminUserInput,
+): Promise<HandlerResult> {
+  return deleteSeAdminUserService(input)
+}
+
+export interface SetSeAdminLockInput {
+  targetId: string
+  operator: AuthUser
+  isLocked: unknown
+  meta: ClientMeta
+}
+
+export async function setSeAdminLockHandler(input: SetSeAdminLockInput): Promise<HandlerResult> {
+  if (typeof input.isLocked !== 'boolean') {
+    return { status: 400, body: { error: 'isLockedは真偽値で指定してください' } }
+  }
+
+  return setSeAdminLockService({
+    targetId: input.targetId,
+    operator: input.operator,
+    isLocked: input.isLocked,
+    meta: input.meta,
+  })
+}
+
 async function listSeAdminUsersService(params: {
   page: number
   limit: number
@@ -55,18 +87,6 @@ async function listSeAdminUsersService(params: {
       pagination: buildPagination(params.page, params.limit, total),
     },
   }
-}
-
-export interface DeleteSeAdminUserInput {
-  targetId: string
-  operator: AuthUser
-  meta: ClientMeta
-}
-
-export async function deleteSeAdminUserHandler(
-  input: DeleteSeAdminUserInput,
-): Promise<HandlerResult> {
-  return deleteSeAdminUserService(input)
 }
 
 async function deleteSeAdminUserService(params: DeleteSeAdminUserInput): Promise<HandlerResult> {
@@ -95,26 +115,6 @@ async function deleteSeAdminUserService(params: DeleteSeAdminUserInput): Promise
   })
 
   return { status: 200, body: { message: 'SE管理者アカウントを削除しました' } }
-}
-
-export interface SetSeAdminLockInput {
-  targetId: string
-  operator: AuthUser
-  isLocked: unknown
-  meta: ClientMeta
-}
-
-export async function setSeAdminLockHandler(input: SetSeAdminLockInput): Promise<HandlerResult> {
-  if (typeof input.isLocked !== 'boolean') {
-    return { status: 400, body: { error: 'isLockedは真偽値で指定してください' } }
-  }
-
-  return setSeAdminLockService({
-    targetId: input.targetId,
-    operator: input.operator,
-    isLocked: input.isLocked,
-    meta: input.meta,
-  })
 }
 
 async function setSeAdminLockService(params: {
