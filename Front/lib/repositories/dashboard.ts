@@ -6,7 +6,6 @@ export const DEFAULT_ACTIVITIES_LIMIT = 10
 // クエリキーは複数ページ・キャッシュ無効化で共有するため repository 層に集約する。
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  summary: () => [...dashboardKeys.all, 'summary'] as const,
   activities: (limit: number) => [...dashboardKeys.all, 'shop-account-activities', limit] as const,
 }
 
@@ -47,12 +46,6 @@ export interface ShopAccountActivitiesResponse {
   limit: number
 }
 
-export async function fetchDashboardSummary(): Promise<DashboardSummary> {
-  const res = await fetch(`${API_BASE_URL}/api/dashboard/summary`, { credentials: 'include' })
-  if (!res.ok) throw new Error('サマリーの取得に失敗しました')
-  return res.json()
-}
-
 export async function fetchShopAccountActivities(
   limit: number = DEFAULT_ACTIVITIES_LIMIT,
 ): Promise<ShopAccountActivitiesResponse> {
@@ -63,13 +56,6 @@ export async function fetchShopAccountActivities(
   )
   if (!res.ok) throw new Error('発行状況の取得に失敗しました')
   return res.json()
-}
-
-export function dashboardSummaryQuery() {
-  return queryOptions({
-    queryKey: dashboardKeys.summary(),
-    queryFn: fetchDashboardSummary,
-  })
 }
 
 export function shopAccountActivitiesQuery(limit: number = DEFAULT_ACTIVITIES_LIMIT) {
