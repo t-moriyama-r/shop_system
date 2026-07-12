@@ -1,13 +1,13 @@
 # API仕様書
 
-> バージョン: 1 | 更新日時: 2026/7/1 23:21:47
+> バージョン: 2 | 更新日時: 2026/7/12 0:00:00
 
 ## 項目 1
 
 - **endpoint:** /api/auth/login
 - **method:** POST
 - **summary:** SE管理者ログイン
-- **説明:** メールアドレスとパスワードで認証を行い、セッションを開始する。パスワード未設定（is_password_set=false）の場合はパスワード設定画面へのリダイレクト指示を返す。連続失敗5回でアカウントをロックする。
+- **説明:** メールアドレスとパスワードで認証を行い、セッションを開始する。認証は常にbcrypt照合で行い、成功時はレスポンスbodyで `{ redirectTo, mustChangePassword }` を返す。redirectToはmust_change_password=trueの場合 `/password/setup`（パスワード変更画面）、falseの場合 `/dashboard`。連続失敗5回でアカウントをロックする。
 - **カテゴリ:** 認証
 - **relatedScreen:** ログイン画面
 **auth:**
@@ -42,7 +42,7 @@
 - 403: [object Object]
 - 500: [object Object]
 
-- **備考:** 認証成功時はaudit_logsにLOGIN_SUCCESSを記録。失敗時はLOGIN_FAILUREを記録。failed_login_countが5回に達した場合はis_lockedをTRUEに更新しACCOUNT_LOCKを記録する。※要確認（ロック回数閾値・セッションタイムアウト時間）
+- **備考:** 認証成功時はaudit_logsにLOGIN_SUCCESSを記録（must_change_password=trueの場合はdetailに「初期パスワード未変更 - パスワード変更画面へ遷移」を記録）。失敗時はLOGIN_FAILUREを記録。failed_login_countが5回に達した場合はis_lockedをTRUEに更新しACCOUNT_LOCKを記録する。passwordがNULLのアカウント（旧方式の名残）は401を返す（failed_login_countは加算せず、LOGIN_FAILUREを記録）。※要確認（ロック回数閾値・セッションタイムアウト時間）
 
 ## 項目 2
 
@@ -82,8 +82,8 @@
 
 - **endpoint:** /api/auth/password
 - **method:** POST
-- **summary:** SE管理者パスワード初回設定
-- **説明:** DBに直接追加されたSE管理者がパスワードを初回設定する。is_password_set=falseのアカウントのみ利用可能。設定完了後はis_password_setをTRUEに更新する。
+- **summary:** SE管理者初期パスワード変更
+- **説明:** CLIで発行された初期パスワードを新しいパスワードへ変更する。must_change_password=trueのアカウントのみ利用可能で、falseの場合は409「パスワードは既に変更されています」を返す。変更完了後はpasswordを更新し、must_change_passwordをFALSEに更新のうえ、既存セッションを全破棄して新しいセッションを再発行する。
 - **カテゴリ:** 認証
 - **relatedScreen:** パスワード設定画面（FR-005）
 **auth:**
@@ -119,14 +119,14 @@
 - 409: [object Object]
 - 500: [object Object]
 
-- **備考:** audit_logsにSE_ADMIN_PASSWORD_SETを記録する。bcrypt等でハッシュ化して保存する。※要確認（パスワードポリシーの詳細）
+- **備考:** audit_logsにSE_ADMIN_PASSWORD_SET（detail「初期パスワードを変更」）を記録する。パスワードは8文字以上かつ英字・数字混在を必須とし、bcryptでハッシュ化してpasswordカラムに保存する。
 
 ## 項目 4
 
 - **endpoint:** /api/auth/session
 - **method:** GET
 - **summary:** 現在のセッション情報取得
-- **説明:** Cookieのセッションを検証し、現在ログイン中のSE管理者情報を返す。フロントエンドの認証状態確認やページリロード時のセッション復元に使用する。
+- **説明:** Cookieのセッションを検証し、現在ログイン中のSE管理者情報 `{ seAdminUserId, email, mustChangePassword }` を返す。フロントエンドの認証状態確認やページリロード時のセッション復元に使用する。
 - **カテゴリ:** 認証
 - **relatedScreen:** 全管理画面共通
 **auth:**
@@ -266,7 +266,7 @@
 - 401: [object Object]
 - 500: [object Object]
 
-- **備考:** is_deleted=falseのレコードをデフォルト対象とする。
+- **備考:** is_deleted=falseのレコードをデフォルト対象とする。レスポンスの各ショップアカウント情報にはmustChangePassword（初期パスワード未変更フラグ）を含む。
 
 ## 項目 8
 
@@ -309,7 +309,7 @@
 - 409: [object Object]
 - 500: [object Object]
 
-- **備考:** 登録成功後、email_notification_logsにPENDINGレコードを作成し、バックグラウンドでメール送信処理を実行する。audit_logsにSHOP_ACCOUNT_CREATEを記録する。issued_by_se_admin_user_idにはセッションのSE管理者IDをセットする。※要確認（初期パスワードの生成・送付方式）
+- **備考:** 登録成功後、email_notification_logsにPENDINGレコードを作成し、バックグラウンドでメール送信処理を実行する。audit_logsにSHOP_ACCOUNT_CREATEを記録する。issued_by_se_admin_user_idにはセッションのSE管理者IDをセットする。初期パスワードはランダム生成（crypto.randomBytes(18).base64url）し、bcryptハッシュのみをDBに保存のうえ、平文はAWS SESで送信する通知メール本文でのみ通知する。must_change_passwordはTRUEで登録する。レスポンスにはmustChangePasswordを含む（initial_password_hashは含めない）。
 
 ## 項目 9
 
@@ -347,7 +347,7 @@
 - 404: [object Object]
 - 500: [object Object]
 
-- **備考:** is_deleted=trueのレコードは404を返す。※要確認（削除済みアカウントの閲覧可否）
+- **備考:** is_deleted=trueのレコードは404を返す。レスポンスにはmustChangePassword（初期パスワード未変更フラグ）を含む。※要確認（削除済みアカウントの閲覧可否）
 
 ## 項目 10
 
@@ -393,7 +393,7 @@
 - 404: [object Object]
 - 500: [object Object]
 
-- **備考:** audit_logsにステータス変更を記録する。※要確認（ステータス遷移ルールの詳細）
+- **備考:** audit_logsにステータス変更を記録する。レスポンスの更新後アカウント情報にはmustChangePasswordを含む。※要確認（ステータス遷移ルールの詳細）
 
 ## 項目 11
 
@@ -432,7 +432,7 @@
 - 409: [object Object]
 - 500: [object Object]
 
-- **備考:** email_notification_logsに新たなPENDINGレコードを作成してバックグラウンド送信をトリガーする。※要確認（再送信可能な条件・回数上限・リトライ方針）
+- **備考:** email_notification_logsに新たなPENDINGレコードを作成してバックグラウンド送信をトリガーする。再送は初期パスワードの再発行を伴うため、shop_accountsのmust_change_passwordをTRUEに立て直す。※要確認（再送信可能な条件・回数上限・リトライ方針）
 
 ## 項目 12
 
@@ -515,7 +515,7 @@
 - 401: [object Object]
 - 500: [object Object]
 
-- **備考:** password_hashフィールドはレスポンスに含めない。
+- **備考:** password（ハッシュ）フィールドはレスポンスに含めない。
 
 ## 項目 14
 
