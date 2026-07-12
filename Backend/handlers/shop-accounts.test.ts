@@ -44,7 +44,7 @@ const {
 } = await import('./shop-accounts')
 
 const VALID_UUID = '123e4567-e89b-12d3-a456-426614174000'
-const operator = { seAdminUserId: 'op-1', email: 'op@example.com', isPasswordSet: true }
+const operator = { seAdminUserId: 'op-1', email: 'op@example.com', mustChangePassword: false }
 const meta = { ipAddress: null, userAgent: null }
 
 beforeEach(() => {

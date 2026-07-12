@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, ilike, type SQL } from 'drizzle-orm'
 
 import { db } from './client'
-import { auditLogs, seAdminUsers } from './schema'
+import { auditLogs, seAdminEmailNotificationLogs, seAdminUsers } from './schema'
 import { deleteSessionsForUser } from './sessions'
 
 export type SeAdminUser = typeof seAdminUsers.$inferSelect
@@ -30,25 +30,56 @@ export class SeAdminCreateError extends Error {
   }
 }
 
+/**
+ * 初期パスワード通知メールの送信失敗エラー。アカウント作成のロールバックを伴う。
+ */
+export class SeAdminNotificationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SeAdminNotificationError'
+  }
+}
+
 export interface CreatedSeAdmin {
   seAdminUserId: string
   email: string
+}
+
+// SE管理者宛アカウント発行通知の種別（se_admin_email_notification_logs.notification_type）。
+export const SE_ADMIN_ACCOUNT_ISSUED_NOTIFICATION = 'SE_ADMIN_ACCOUNT_ISSUED'
+
+export interface CreateSeAdminInput {
+  email: string
+  /** ランダム生成した初期パスワードの bcrypt ハッシュ（生成・ハッシュ化は呼び出し側の責務） */
+  passwordHash: string
+  /**
+   * 初期パスワード通知メールの送信処理。トランザクション内の最後に await され、
+   * throw するとアカウント作成ごとロールバックされる。
+   */
+  sendNotification: (created: CreatedSeAdmin) => Promise<void>
 }
 
 /**
  * SE管理者アカウントを追加する（DB への直接書き込み）。
  *
  * 不正アクセスのリスクを抑えるため、追加は Web 画面ではなく CLI からのみ行う運用。
- * `password` は NULL（パスワード未設定 = 初回ログイン時に画面で設定）で作成し、
- * `audit_logs` に `SE_ADMIN_CREATE`（operator_type=cli）を記録する。
+ * ランダム生成された初期パスワードのハッシュと `must_change_password=true`
+ * （初回ログイン後にパスワード変更を強制）で作成し、通知メールの送信ログ
+ * （se_admin_email_notification_logs）と `audit_logs` の `SE_ADMIN_CREATE`
+ * （operator_type=cli）を同一トランザクションで記録する。
+ *
+ * メール送信はトランザクションの最後に行い、失敗時は全体をロールバックする
+ * （初期パスワードが誰にも届かないアカウントを残さない）。「メールは届いたが
+ * DB はロールバック」となるのはコミット自体が失敗した場合のみに限定される。
  *
  * @throws {SeAdminCreateError} メール形式が不正、または既に同一メールが存在する場合
+ * @throws {SeAdminNotificationError} 通知メールの送信に失敗した場合（作成はロールバック済み）
  */
-export async function createSeAdmin(email: string): Promise<CreatedSeAdmin> {
-  const normalizedEmail = email.trim()
+export async function createSeAdmin(input: CreateSeAdminInput): Promise<CreatedSeAdmin> {
+  const normalizedEmail = input.email.trim()
 
   if (!isValidEmail(normalizedEmail)) {
-    throw new SeAdminCreateError(`メールアドレスの形式が不正です: ${email}`)
+    throw new SeAdminCreateError(`メールアドレスの形式が不正です: ${input.email}`)
   }
 
   // email はユニーク制約があり論理削除済みレコードも枠を占有するため、is_deleted で絞らず存在確認する。
@@ -61,21 +92,42 @@ export async function createSeAdmin(email: string): Promise<CreatedSeAdmin> {
     throw new SeAdminCreateError(`既に登録済みのメールアドレスです: ${normalizedEmail}`)
   }
 
-  const [created] = await db
-    .insert(seAdminUsers)
-    .values({ email: normalizedEmail })
-    .returning({ seAdminUserId: seAdminUsers.seAdminUserId, email: seAdminUsers.email })
+  return db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(seAdminUsers)
+      .values({ email: normalizedEmail, password: input.passwordHash, mustChangePassword: true })
+      .returning({ seAdminUserId: seAdminUsers.seAdminUserId, email: seAdminUsers.email })
 
-  await db.insert(auditLogs).values({
-    operatorType: 'cli',
-    actionType: 'SE_ADMIN_CREATE',
-    targetType: 'se_admin_user',
-    targetId: created.seAdminUserId,
-    result: 'SUCCESS',
-    detail: `CLI による SE 管理者アカウント追加: ${created.email}`,
+    // 送信失敗時はトランザクションごと消えるため、残るのは SUCCESS 行のみ。
+    await tx.insert(seAdminEmailNotificationLogs).values({
+      seAdminUserId: created.seAdminUserId,
+      toEmail: created.email,
+      notificationType: SE_ADMIN_ACCOUNT_ISSUED_NOTIFICATION,
+      sendStatus: 'SUCCESS',
+      sentAt: new Date(),
+    })
+
+    await tx.insert(auditLogs).values({
+      operatorType: 'cli',
+      actionType: 'SE_ADMIN_CREATE',
+      targetType: 'se_admin_user',
+      targetId: created.seAdminUserId,
+      result: 'SUCCESS',
+      detail: `CLI による SE 管理者アカウント追加（初期パスワードをメール送信）: ${created.email}`,
+    })
+
+    try {
+      await input.sendNotification(created)
+    } catch (err) {
+      throw new SeAdminNotificationError(
+        `通知メールの送信に失敗したためアカウント作成を取り消しました: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      )
+    }
+
+    return created
   })
-
-  return created
 }
 
 /**
@@ -305,7 +357,8 @@ export async function applyFailedLoginAttempt(
 }
 
 /**
- * パスワード（ハッシュ済み）を設定する。
+ * パスワード（ハッシュ済み）を設定する。初期パスワードからの変更が完了するため
+ * must_change_password も下ろす。
  */
 export async function setSeAdminPassword(
   seAdminUserId: string,
@@ -314,6 +367,6 @@ export async function setSeAdminPassword(
 ): Promise<void> {
   await db
     .update(seAdminUsers)
-    .set({ password: hashedPassword, updatedAt: now })
+    .set({ password: hashedPassword, mustChangePassword: false, updatedAt: now })
     .where(eq(seAdminUsers.seAdminUserId, seAdminUserId))
 }

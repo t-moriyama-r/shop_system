@@ -10,7 +10,7 @@ vi.mock('db/shop-accounts', () => ({
   recordEmailNotificationResult: (...a: unknown[]) => recordEmailNotificationResult(...a),
 }))
 
-const { sendShopAccountIssuedNotification } = await import('./notify')
+const { sendShopAccountIssuedNotification, sendSeAdminAccountIssuedEmail } = await import('./notify')
 
 const baseInput = {
   emailNotificationLogId: 'log-1',
@@ -67,5 +67,28 @@ describe('sendShopAccountIssuedNotification', () => {
       status: 'FAILURE',
       errorMessage: 'network down',
     })
+  })
+})
+
+describe('sendSeAdminAccountIssuedEmail', () => {
+  const input = { toEmail: 'admin@example.com', temporaryPassword: 'initial-pass-123' }
+
+  it('sends the initial password mail to the SE admin', async () => {
+    send.mockResolvedValue({ success: true })
+    await sendSeAdminAccountIssuedEmail(input)
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'admin@example.com',
+        text: expect.stringContaining('initial-pass-123'),
+      }),
+    )
+    // ショップ向けと異なり、送信結果の記録は呼び出し側（createSeAdmin の tx）が担う
+    expect(recordEmailNotificationResult).not.toHaveBeenCalled()
+  })
+
+  it('throws when the sender reports a failure (caller rolls back the account)', async () => {
+    send.mockResolvedValue({ success: false, error: 'SES timeout' })
+    await expect(sendSeAdminAccountIssuedEmail(input)).rejects.toThrow('SES timeout')
   })
 })

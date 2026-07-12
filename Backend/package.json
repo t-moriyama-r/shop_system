@@ -7,6 +7,7 @@
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "dev": "tsx watch index.ts",
+    "create-se-admin": "tsx cli/create-se-admin.ts",
     "test": "vitest run"
   },
   "keywords": [],

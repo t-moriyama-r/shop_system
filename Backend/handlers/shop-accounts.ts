@@ -1,5 +1,3 @@
-import bcrypt from 'bcrypt'
-import crypto from 'node:crypto'
 import {
   createResendEmailNotificationLog,
   createShopAccount,
@@ -16,6 +14,7 @@ import {
 import { recordAuditLog } from '../lib/audit-log'
 import { sendShopAccountIssuedNotification } from '../lib/email/notify'
 import { buildPagination, parsePositiveInt } from '../lib/pagination'
+import { generateInitialPassword, hashPassword } from '../lib/password'
 import type { AuthUser } from '../middleware/auth'
 import type { ClientMeta, HandlerResult } from './types'
 
@@ -24,16 +23,9 @@ const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 100
 
 const MAX_FIELD_LENGTH = 255
-const BCRYPT_SALT_ROUNDS = 10
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-// 発行時に付与する一時パスワードを生成する。平文はメール本文でのみ利用され、
-// DB にはハッシュ値のみを保存する（設計 BP-003 備考）。
-function generateInitialPassword(): string {
-  return crypto.randomBytes(18).toString('base64url')
-}
 
 // 発行完了通知メールの送信をトリガーする。BP-005/BP-011 の設計どおり非同期
 // （fire-and-forget）で実行し、HTTPレスポンスをブロックしない。
@@ -127,7 +119,7 @@ export async function createShopAccountHandler(
   }
 
   const temporaryPassword = generateInitialPassword()
-  const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
+  const initialPasswordHash = await hashPassword(temporaryPassword)
 
   const { account, emailNotificationLogId } = await createShopAccount({
     shopName: shopName.value,
@@ -280,7 +272,7 @@ export async function resendNotificationHandler(
 
   // 再送信時は新しい一時パスワードを発行し直す。
   const temporaryPassword = generateInitialPassword()
-  const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
+  const initialPasswordHash = await hashPassword(temporaryPassword)
 
   const log = await createResendEmailNotificationLog({
     shopAccountId: input.shopAccountId,

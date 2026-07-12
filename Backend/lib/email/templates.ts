@@ -14,6 +14,31 @@ export interface EmailContent {
   text: string
 }
 
+export interface SeAdminAccountIssuedTemplateInput {
+  email: string
+  temporaryPassword: string
+  loginUrl: string
+}
+
+export function buildSeAdminAccountIssuedEmail(
+  input: SeAdminAccountIssuedTemplateInput,
+): EmailContent {
+  const subject = '【ショップ管理システム】SE管理者アカウント発行のお知らせ'
+  const text = [
+    'SE管理者アカウントを発行しました。',
+    '以下の情報でログインしてください。',
+    '',
+    `ログインURL: ${input.loginUrl}`,
+    `メールアドレス: ${input.email}`,
+    `初期パスワード: ${input.temporaryPassword}`,
+    '',
+    '初回ログイン後、パスワードの変更が必要です。',
+    '本メールに心当たりがない場合は、破棄していただきますようお願いいたします。',
+  ].join('\n')
+
+  return { subject, text }
+}
+
 export function buildShopAccountIssuedEmail(input: ShopAccountIssuedTemplateInput): EmailContent {
   const subject = '【ショップ管理システム】アカウント発行のお知らせ'
   const text = [

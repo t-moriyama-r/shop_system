@@ -138,6 +138,7 @@ describe('createShopAccount', () => {
       shopName: 'Shop',
       email: 'a@example.com',
       initialPasswordHash: 'hashed',
+      mustChangePassword: true,
       accountStatus: 'pending',
       issuedBySeAdminUserId: 'op-1',
     })
@@ -183,7 +184,11 @@ describe('createResendEmailNotificationLog', () => {
 
     expect(result).toMatchObject({ emailNotificationLogId: 'e2' })
     expect(h.state.updateTables).toEqual([shopAccounts])
-    expect(h.state.updateSets[0]).toMatchObject({ initialPasswordHash: 'new-hashed' })
+    // 再送 = 初期パスワード再発行なので変更強制フラグも立て直される
+    expect(h.state.updateSets[0]).toMatchObject({
+      initialPasswordHash: 'new-hashed',
+      mustChangePassword: true,
+    })
     expect(h.state.insertTables).toEqual([emailNotificationLogs])
     expect(h.state.insertValues[0]).toMatchObject({
       shopAccountId: 's1',

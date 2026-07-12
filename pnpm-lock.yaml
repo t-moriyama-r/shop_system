@@ -54,12 +54,18 @@ importers:
         specifier: ^8.16.3
         version: 8.22.0
     devDependencies:
+      '@types/bcrypt':
+        specifier: ^6.0.0
+        version: 6.0.0
       '@types/node':
         specifier: ^22
         version: 22.20.0
       '@types/pg':
         specifier: ^8.15.6
         version: 8.20.0
+      bcrypt:
+        specifier: ^6.0.0
+        version: 6.0.0
       dotenv:
         specifier: ^17.2.3
         version: 17.4.2

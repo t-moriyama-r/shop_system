@@ -4,7 +4,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
  * SE管理画面に「ログイン済みの状態」を作るためのスクリプト。
  *
  * すでに起動している Chrome に CDP 経由で接続し、ログイン
- * （初回ログイン時は初回パスワード設定も）を自動で行う。
+ * （初期パスワード未変更の場合はパスワード変更も）を自動で行う。
  * 実行後はブラウザにセッションが残るため、以降は computer use 等で
  * 手動操作を続けられる（ログイン操作でトークンを消費しない）。
  *
@@ -12,7 +12,7 @@ import { chromium, type Browser, type Page } from 'playwright-core'
  *   CDP_URL  接続先 Chrome の CDP エンドポイント (default: http://localhost:29229)
  *   BASE_URL Front のベース URL             (default: http://localhost:3000)
  *   EMAIL    ログインするメールアドレス       (default: admin@example.com)
- *   PASSWORD ログイン / 初回設定するパスワード (default: Admin1234)
+ *   PASSWORD ログイン / 変更後のパスワード     (default: Admin1234 = シーダーの初期パスワード)
  */
 const CDP_URL = process.env.CDP_URL ?? 'http://localhost:29229'
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000'
@@ -47,7 +47,7 @@ async function main() {
     ]).catch(() => undefined)
 
     if (page.url().includes(PASSWORD_SETUP_PATH)) {
-      // 初回ログイン: パスワード未設定なので設定する
+      // 初期パスワード未変更: 新しいパスワードへ変更する（同一値の再設定も許容されるため冪等）
       await page.getByLabel('新しいパスワード').fill(PASSWORD)
       await page.getByLabel('パスワード確認').fill(PASSWORD)
       await page.getByRole('button', { name: 'パスワードを設定する' }).click()

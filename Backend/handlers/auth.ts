@@ -74,23 +74,21 @@ export async function loginHandler(input: LoginInput): Promise<HandlerResult> {
     }
   }
 
-  // パスワード未設定の場合 - メールアドレスのみで認証しPW設定画面へ
+  // パスワードが NULL のアカウントは旧方式（パスワード未設定運用）の名残でログイン不可。
+  // 現方式では作成時に必ず初期パスワードが入るため、CLI での再作成が復旧手段。
+  // 認証が成功し得ないアカウントのため、連続失敗カウントは加算しない。
   if (user.password === null) {
-    const cookie = await issueSession(user.seAdminUserId)
-    await recordSuccessfulLogin(user.seAdminUserId)
-
     await recordAuditLog({
       operatorType: 'se_admin',
       seAdminUserId: user.seAdminUserId,
-      actionType: 'LOGIN_SUCCESS',
+      actionType: 'LOGIN_FAILURE',
       targetType: 'se_admin_user',
       targetId: user.seAdminUserId,
-      result: 'SUCCESS',
-      detail: 'パスワード未設定 - PW設定画面へ遷移',
+      result: 'FAILURE',
+      detail: 'パスワード未設定（旧方式アカウント）のためログイン不可',
       ...meta,
     })
-
-    return { status: 200, body: { redirectTo: '/password/setup', isPasswordSet: false }, cookie }
+    return { status: 401, body: { error: 'メールアドレスまたはパスワードが正しくありません' } }
   }
 
   // パスワード検証
@@ -123,7 +121,7 @@ export async function loginHandler(input: LoginInput): Promise<HandlerResult> {
     return { status: 401, body: { error: 'メールアドレスまたはパスワードが正しくありません' } }
   }
 
-  // 認証成功
+  // 認証成功。初期パスワードのままのユーザーはパスワード変更画面へ誘導する。
   const cookie = await issueSession(user.seAdminUserId)
   await recordSuccessfulLogin(user.seAdminUserId)
 
@@ -134,10 +132,18 @@ export async function loginHandler(input: LoginInput): Promise<HandlerResult> {
     targetType: 'se_admin_user',
     targetId: user.seAdminUserId,
     result: 'SUCCESS',
+    ...(user.mustChangePassword ? { detail: '初期パスワード未変更 - パスワード変更画面へ遷移' } : {}),
     ...meta,
   })
 
-  return { status: 200, body: { redirectTo: '/dashboard', isPasswordSet: true }, cookie }
+  return {
+    status: 200,
+    body: {
+      redirectTo: user.mustChangePassword ? '/password/setup' : '/dashboard',
+      mustChangePassword: user.mustChangePassword,
+    },
+    cookie,
+  }
 }
 
 export interface LogoutInput {
@@ -174,8 +180,8 @@ export interface SetPasswordInput {
 export async function setPasswordHandler(input: SetPasswordInput): Promise<HandlerResult> {
   const { operator, password, passwordConfirm, meta } = input
 
-  if (operator.isPasswordSet) {
-    return { status: 409, body: { error: 'パスワードは既に設定されています' } }
+  if (!operator.mustChangePassword) {
+    return { status: 409, body: { error: 'パスワードは既に変更されています' } }
   }
 
   if (!password || !passwordConfirm) {
@@ -200,9 +206,9 @@ export async function setPasswordHandler(input: SetPasswordInput): Promise<Handl
   const hashedPassword = await bcrypt.hash(password, 10)
   await setSeAdminPassword(operator.seAdminUserId, hashedPassword)
 
-  // パスワード設定に伴い既存セッションを全て破棄し、セッションを再発行する。
-  // パスワード未設定時はメールアドレスのみでセッションが作れるため、設定完了時点で
-  // 古いセッション（他者が作成した可能性のあるものを含む）を無効化する。
+  // 認証情報の変更に伴い既存セッションを全て破棄し、セッションを再発行する。
+  // 初期パスワードが漏えいしていた場合でも、変更完了時点で他者が作成した可能性のある
+  // 古いセッションを無効化できる。
   await deleteSessionsForUser(operator.seAdminUserId)
   const cookie = await issueSession(operator.seAdminUserId)
 
@@ -213,6 +219,7 @@ export async function setPasswordHandler(input: SetPasswordInput): Promise<Handl
     targetType: 'se_admin_user',
     targetId: operator.seAdminUserId,
     result: 'SUCCESS',
+    detail: '初期パスワードを変更',
     ...meta,
   })
 
@@ -244,6 +251,6 @@ export async function authenticateSession(
   return {
     seAdminUserId: user.seAdminUserId,
     email: user.email,
-    isPasswordSet: user.password !== null,
+    mustChangePassword: user.mustChangePassword,
   }
 }

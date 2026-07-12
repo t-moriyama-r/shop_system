@@ -82,7 +82,7 @@ describe('loginHandler', () => {
     expect(r.status).toBe(403)
   })
 
-  it('issues a session and redirects to setup when password is unset', async () => {
+  it('returns 401 without counting a failure when password is NULL (legacy account)', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: false,
@@ -90,8 +90,26 @@ describe('loginHandler', () => {
       failedLoginCount: 0,
     })
     const r = await loginHandler({ email: 'a@x.com', password: 'anything', meta })
+    expect(r.status).toBe(401)
+    expect(recordAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: 'LOGIN_FAILURE', result: 'FAILURE' }),
+    )
+    expect(applyFailedLoginAttempt).not.toHaveBeenCalled()
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
+  it('redirects to password setup when the initial password is unchanged', async () => {
+    findActiveSeAdminByEmail.mockResolvedValue({
+      seAdminUserId: 'u1',
+      isLocked: false,
+      password: 'hash',
+      mustChangePassword: true,
+      failedLoginCount: 0,
+    })
+    bcryptCompare.mockResolvedValue(true)
+    const r = await loginHandler({ email: 'a@x.com', password: 'good', meta })
     expect(r.status).toBe(200)
-    expect(r.body).toMatchObject({ redirectTo: '/password/setup', isPasswordSet: false })
+    expect(r.body).toMatchObject({ redirectTo: '/password/setup', mustChangePassword: true })
     expect(r.cookie).toMatchObject({ action: 'set' })
     expect(createSession).toHaveBeenCalled()
     expect(recordSuccessfulLogin).toHaveBeenCalledWith('u1')
@@ -128,12 +146,13 @@ describe('loginHandler', () => {
       seAdminUserId: 'u1',
       isLocked: false,
       password: 'hash',
+      mustChangePassword: false,
       failedLoginCount: 0,
     })
     bcryptCompare.mockResolvedValue(true)
     const r = await loginHandler({ email: 'a@x.com', password: 'good', meta })
     expect(r.status).toBe(200)
-    expect(r.body).toMatchObject({ redirectTo: '/dashboard', isPasswordSet: true })
+    expect(r.body).toMatchObject({ redirectTo: '/dashboard', mustChangePassword: false })
     expect(r.cookie).toMatchObject({ action: 'set' })
     expect(recordAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ actionType: 'LOGIN_SUCCESS', result: 'SUCCESS' }),
@@ -145,7 +164,7 @@ describe('logoutHandler', () => {
   it('deletes the session, clears the cookie, and audits', async () => {
     const r = await logoutHandler({
       sessionId: 'sid',
-      operator: { seAdminUserId: 'u1', email: 'e@x.com', isPasswordSet: true },
+      operator: { seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: false },
       meta,
     })
     expect(r.status).toBe(200)
@@ -159,7 +178,7 @@ describe('logoutHandler', () => {
   it('still clears the cookie when there is no session id', async () => {
     const r = await logoutHandler({
       sessionId: undefined,
-      operator: { seAdminUserId: 'u1', email: 'e@x.com', isPasswordSet: true },
+      operator: { seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: false },
       meta,
     })
     expect(r.cookie).toEqual({ action: 'clear' })
@@ -168,11 +187,11 @@ describe('logoutHandler', () => {
 })
 
 describe('setPasswordHandler', () => {
-  const operator = { seAdminUserId: 'u1', email: 'e@x.com', isPasswordSet: false }
+  const operator = { seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: true }
 
-  it('returns 409 when the password is already set', async () => {
+  it('returns 409 when the password has already been changed', async () => {
     const r = await setPasswordHandler({
-      operator: { ...operator, isPasswordSet: true },
+      operator: { ...operator, mustChangePassword: false },
       password: 'Abc12345',
       passwordConfirm: 'Abc12345',
       meta,
@@ -243,9 +262,14 @@ describe('authenticateSession', () => {
 
   it('returns the AuthUser and extends the session (sliding window)', async () => {
     findValidSession.mockResolvedValue({ sessionId: 'sid', seAdminUserId: 'u1' })
-    findActiveSeAdminById.mockResolvedValue({ seAdminUserId: 'u1', email: 'e@x.com', password: 'hash' })
+    findActiveSeAdminById.mockResolvedValue({
+      seAdminUserId: 'u1',
+      email: 'e@x.com',
+      password: 'hash',
+      mustChangePassword: true,
+    })
     const u = await authenticateSession('sid', new Date())
-    expect(u).toEqual({ seAdminUserId: 'u1', email: 'e@x.com', isPasswordSet: true })
+    expect(u).toEqual({ seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: true })
     expect(extendSession).toHaveBeenCalled()
   })
 })
