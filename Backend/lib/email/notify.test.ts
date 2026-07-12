@@ -26,7 +26,7 @@ beforeEach(() => {
 })
 
 describe('sendShopAccountIssuedNotification', () => {
-  it('records SUCCESS when the sender succeeds', async () => {
+  it('送信が成功した場合はSUCCESSを記録する', async () => {
     send.mockResolvedValue({ success: true })
     await sendShopAccountIssuedNotification(baseInput)
 
@@ -45,7 +45,7 @@ describe('sendShopAccountIssuedNotification', () => {
     })
   })
 
-  it('records FAILURE with the error message when the sender fails', async () => {
+  it('送信が失敗した場合はエラーメッセージ付きでFAILUREを記録する', async () => {
     send.mockResolvedValue({ success: false, error: 'SES timeout' })
     await sendShopAccountIssuedNotification(baseInput)
 
@@ -57,7 +57,7 @@ describe('sendShopAccountIssuedNotification', () => {
     })
   })
 
-  it('records FAILURE when the sender throws instead of rejecting gracefully', async () => {
+  it('送信処理が例外をスローした場合もFAILUREを記録する', async () => {
     send.mockRejectedValue(new Error('network down'))
     await sendShopAccountIssuedNotification(baseInput)
 
@@ -73,7 +73,7 @@ describe('sendShopAccountIssuedNotification', () => {
 describe('sendSeAdminAccountIssuedEmail', () => {
   const input = { toEmail: 'admin@example.com', temporaryPassword: 'initial-pass-123' }
 
-  it('sends the initial password mail to the SE admin', async () => {
+  it('SE管理者宛に初期パスワードメールを送信する', async () => {
     send.mockResolvedValue({ success: true })
     await sendSeAdminAccountIssuedEmail(input)
 
@@ -87,7 +87,7 @@ describe('sendSeAdminAccountIssuedEmail', () => {
     expect(recordEmailNotificationResult).not.toHaveBeenCalled()
   })
 
-  it('throws when the sender reports a failure (caller rolls back the account)', async () => {
+  it('送信が失敗した場合はthrowする（呼び出し側がアカウント作成をロールバックする）', async () => {
     send.mockResolvedValue({ success: false, error: 'SES timeout' })
     await expect(sendSeAdminAccountIssuedEmail(input)).rejects.toThrow('SES timeout')
   })

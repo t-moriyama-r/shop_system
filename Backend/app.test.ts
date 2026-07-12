@@ -38,7 +38,7 @@ vi.mock('db/audit-logs', () => ({}))
 const { app } = await import('./app')
 
 describe('GET /api/health', () => {
-  it('returns { status: "ok" }', async () => {
+  it('{ status: "ok" } を返す', async () => {
     const res = await app.request('/api/health')
 
     expect(res.status).toBe(200)
@@ -51,7 +51,7 @@ describe('GET /api/menu', () => {
     vi.clearAllMocks()
   })
 
-  it('returns mapped menu items from the database', async () => {
+  it('DBから取得したメニュー項目をマッピングして返す', async () => {
     const dbRows = [
       { menuItemId: 'uuid-1', name: 'コーヒー', price: 400, createdAt: new Date(), updatedAt: new Date() },
       { menuItemId: 'uuid-2', name: 'カフェラテ', price: 480, createdAt: new Date(), updatedAt: new Date() },
@@ -68,7 +68,7 @@ describe('GET /api/menu', () => {
     ])
   })
 
-  it('returns an empty array when there are no menu items', async () => {
+  it('メニュー項目が存在しない場合は空配列を返す', async () => {
     mockFrom.mockResolvedValue([])
 
     const res = await app.request('/api/menu')
@@ -77,7 +77,7 @@ describe('GET /api/menu', () => {
     expect(await res.json()).toEqual([])
   })
 
-  it('strips extra fields from DB rows (only id, name, price)', async () => {
+  it('DBの行から余分なフィールドを除去する（id, name, priceのみ）', async () => {
     const dbRows = [
       { menuItemId: 'uuid-3', name: 'チーズケーキ', price: 550, createdAt: new Date(), updatedAt: new Date() },
     ]
@@ -92,7 +92,7 @@ describe('GET /api/menu', () => {
 })
 
 describe('unknown routes', () => {
-  it('returns 404 for unregistered paths', async () => {
+  it('未登録のパスの場合は404を返す', async () => {
     const res = await app.request('/api/unknown')
 
     expect(res.status).toBe(404)

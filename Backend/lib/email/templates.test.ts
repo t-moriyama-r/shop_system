@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildSeAdminAccountIssuedEmail, buildShopAccountIssuedEmail } from './templates'
 
 describe('buildShopAccountIssuedEmail', () => {
-  it('includes the email, temporary password, and login URL in the body', () => {
+  it('本文にメールアドレス・仮パスワード・ログインURLが含まれる', () => {
     const { subject, text } = buildShopAccountIssuedEmail({
       shopName: 'テストショップ',
       contactName: '山田太郎',
@@ -21,7 +21,7 @@ describe('buildShopAccountIssuedEmail', () => {
 })
 
 describe('buildSeAdminAccountIssuedEmail', () => {
-  it('includes the email, initial password, and login URL in the body', () => {
+  it('本文にメールアドレス・初期パスワード・ログインURLが含まれる', () => {
     const { subject, text } = buildSeAdminAccountIssuedEmail({
       email: 'admin@example.com',
       temporaryPassword: 'initial-pass-123',

@@ -56,13 +56,13 @@ beforeEach(() => {
 })
 
 describe('loginHandler', () => {
-  it('returns 400 when email or password is missing', async () => {
+  it('メールまたはパスワードが未指定の場合は400を返す', async () => {
     const r = await loginHandler({ email: '', password: '', meta })
     expect(r.status).toBe(400)
     expect(findActiveSeAdminByEmail).not.toHaveBeenCalled()
   })
 
-  it('returns 401 and audits FAILURE when the user is not found', async () => {
+  it('ユーザーが見つからない場合は401を返し、FAILUREを監査ログに記録する', async () => {
     findActiveSeAdminByEmail.mockResolvedValue(undefined)
     const r = await loginHandler({ email: 'a@x.com', password: 'p', meta })
     expect(r.status).toBe(401)
@@ -71,7 +71,7 @@ describe('loginHandler', () => {
     )
   })
 
-  it('returns 403 when the account is locked', async () => {
+  it('アカウントがロックされている場合は403を返す', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: true,
@@ -82,7 +82,7 @@ describe('loginHandler', () => {
     expect(r.status).toBe(403)
   })
 
-  it('returns 401 without counting a failure when password is NULL (legacy account)', async () => {
+  it('パスワードがNULL（旧方式アカウント）の場合は失敗回数を加算せず401を返す', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: false,
@@ -98,7 +98,7 @@ describe('loginHandler', () => {
     expect(createSession).not.toHaveBeenCalled()
   })
 
-  it('redirects to password setup when the initial password is unchanged', async () => {
+  it('初期パスワード未変更の場合はパスワード変更画面へリダイレクトする', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: false,
@@ -115,7 +115,7 @@ describe('loginHandler', () => {
     expect(recordSuccessfulLogin).toHaveBeenCalledWith('u1')
   })
 
-  it('increments failure count and returns 401 on wrong password', async () => {
+  it('パスワードが誤っている場合は失敗回数を加算し、401を返す', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: false,
@@ -128,7 +128,7 @@ describe('loginHandler', () => {
     expect(applyFailedLoginAttempt).toHaveBeenCalledWith('u1', 1, false)
   })
 
-  it('locks the account and returns 403 on the 5th consecutive failure', async () => {
+  it('5回連続で失敗した場合はアカウントをロックし、403を返す', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: false,
@@ -141,7 +141,7 @@ describe('loginHandler', () => {
     expect(applyFailedLoginAttempt).toHaveBeenCalledWith('u1', 5, true)
   })
 
-  it('issues a session and redirects to dashboard on success', async () => {
+  it('成功時はセッションを発行し、ダッシュボードへリダイレクトする', async () => {
     findActiveSeAdminByEmail.mockResolvedValue({
       seAdminUserId: 'u1',
       isLocked: false,
@@ -161,7 +161,7 @@ describe('loginHandler', () => {
 })
 
 describe('logoutHandler', () => {
-  it('deletes the session, clears the cookie, and audits', async () => {
+  it('セッションを削除し、クッキーをクリアして監査ログに記録する', async () => {
     const r = await logoutHandler({
       sessionId: 'sid',
       operator: { seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: false },
@@ -175,7 +175,7 @@ describe('logoutHandler', () => {
     )
   })
 
-  it('still clears the cookie when there is no session id', async () => {
+  it('セッションIDがない場合でもクッキーをクリアする', async () => {
     const r = await logoutHandler({
       sessionId: undefined,
       operator: { seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: false },
@@ -189,7 +189,7 @@ describe('logoutHandler', () => {
 describe('setPasswordHandler', () => {
   const operator = { seAdminUserId: 'u1', email: 'e@x.com', mustChangePassword: true }
 
-  it('returns 409 when the password has already been changed', async () => {
+  it('パスワードが既に変更済みの場合は409を返す', async () => {
     const r = await setPasswordHandler({
       operator: { ...operator, mustChangePassword: false },
       password: 'Abc12345',
@@ -199,12 +199,12 @@ describe('setPasswordHandler', () => {
     expect(r.status).toBe(409)
   })
 
-  it('returns 400 when fields are missing', async () => {
+  it('必須項目が未指定の場合は400を返す', async () => {
     const r = await setPasswordHandler({ operator, password: '', passwordConfirm: '', meta })
     expect(r.status).toBe(400)
   })
 
-  it('returns 400 when passwords do not match', async () => {
+  it('パスワードが一致しない場合は400を返す', async () => {
     const r = await setPasswordHandler({
       operator,
       password: 'Abc12345',
@@ -214,12 +214,12 @@ describe('setPasswordHandler', () => {
     expect(r.status).toBe(400)
   })
 
-  it('returns 400 when the password is too short', async () => {
+  it('パスワードが短すぎる場合は400を返す', async () => {
     const r = await setPasswordHandler({ operator, password: 'Ab1', passwordConfirm: 'Ab1', meta })
     expect(r.status).toBe(400)
   })
 
-  it('returns 400 when the password lacks a letter/number mix', async () => {
+  it('パスワードが英数字混在でない場合は400を返す', async () => {
     const r = await setPasswordHandler({
       operator,
       password: 'abcdefgh',
@@ -229,7 +229,7 @@ describe('setPasswordHandler', () => {
     expect(r.status).toBe(400)
   })
 
-  it('sets the password, rotates sessions, and issues a new session', async () => {
+  it('パスワードを設定し、セッションを入れ替えて新しいセッションを発行する', async () => {
     bcryptHash.mockResolvedValue('hashed')
     const r = await setPasswordHandler({
       operator,
@@ -249,18 +249,18 @@ describe('setPasswordHandler', () => {
 })
 
 describe('authenticateSession', () => {
-  it('returns null when the session is invalid', async () => {
+  it('セッションが無効な場合はnullを返す', async () => {
     findValidSession.mockResolvedValue(undefined)
     expect(await authenticateSession('sid')).toBeNull()
   })
 
-  it('returns null when the user no longer exists', async () => {
+  it('ユーザーが既に存在しない場合はnullを返す', async () => {
     findValidSession.mockResolvedValue({ sessionId: 'sid', seAdminUserId: 'u1' })
     findActiveSeAdminById.mockResolvedValue(undefined)
     expect(await authenticateSession('sid')).toBeNull()
   })
 
-  it('returns the AuthUser and extends the session (sliding window)', async () => {
+  it('AuthUserを返し、セッションを延長する（スライディングウィンドウ）', async () => {
     findValidSession.mockResolvedValue({ sessionId: 'sid', seAdminUserId: 'u1' })
     findActiveSeAdminById.mockResolvedValue({
       seAdminUserId: 'u1',

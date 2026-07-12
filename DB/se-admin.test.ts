@@ -75,12 +75,12 @@ beforeEach(() => {
 })
 
 describe('isValidEmail', () => {
-  it('accepts a well-formed address', () => {
+  it('正しい形式のアドレスを受け入れる', () => {
     expect(isValidEmail('admin@example.com')).toBe(true)
   })
 
   it.each(['admin', 'admin@', 'admin@example', 'a b@example.com', ''])(
-    'rejects malformed address %j',
+    '不正な形式のアドレス %j を拒否する',
     (bad) => {
       expect(isValidEmail(bad)).toBe(false)
     },
@@ -94,7 +94,7 @@ describe('createSeAdmin', () => {
     sendNotification: vi.fn().mockResolvedValue(undefined),
   }
 
-  it('creates a user with the initial password hash, logs the notification, and records an audit log', async () => {
+  it('初期パスワードのハッシュ付きでユーザーを作成し、通知ログとSE_ADMIN_CREATE監査ログを記録する', async () => {
     h.state.selectResult = []
     h.state.insertReturning = [{ seAdminUserId: 'u1', email: 'new@example.com' }]
     const sendNotification = vi.fn().mockResolvedValue(undefined)
@@ -126,7 +126,7 @@ describe('createSeAdmin', () => {
     expect(sendNotification).toHaveBeenCalledWith({ seAdminUserId: 'u1', email: 'new@example.com' })
   })
 
-  it('trims surrounding whitespace before persisting', async () => {
+  it('保存前に前後の空白をトリムする', async () => {
     h.state.insertReturning = [{ seAdminUserId: 'u2', email: 'trim@example.com' }]
 
     await createSeAdmin({ ...baseInput, email: '  trim@example.com  ' })
@@ -134,7 +134,7 @@ describe('createSeAdmin', () => {
     expect(h.state.insertValues[0]).toMatchObject({ email: 'trim@example.com' })
   })
 
-  it('throws and does not insert when the email format is invalid', async () => {
+  it('メール形式が不正な場合はエラーを投げ、挿入も通知もしない', async () => {
     const sendNotification = vi.fn()
     await expect(
       createSeAdmin({ ...baseInput, email: 'not-an-email', sendNotification }),
@@ -143,7 +143,7 @@ describe('createSeAdmin', () => {
     expect(sendNotification).not.toHaveBeenCalled()
   })
 
-  it('throws and does not insert when the email already exists', async () => {
+  it('メールが既に存在する場合はエラーを投げ、挿入しない', async () => {
     h.state.selectResult = [{ seAdminUserId: 'existing' }]
 
     await expect(createSeAdmin({ ...baseInput, email: 'dup@example.com' })).rejects.toBeInstanceOf(
@@ -152,7 +152,7 @@ describe('createSeAdmin', () => {
     expect(h.state.insertTables).toHaveLength(0)
   })
 
-  it('throws SeAdminNotificationError when the notification fails (transaction rolls back)', async () => {
+  it('通知メールの送信に失敗した場合はSeAdminNotificationErrorを投げる（トランザクションはロールバック）', async () => {
     h.state.insertReturning = [{ seAdminUserId: 'u1', email: 'new@example.com' }]
     const sendNotification = vi.fn().mockRejectedValue(new Error('SES unavailable'))
 
@@ -164,17 +164,17 @@ describe('createSeAdmin', () => {
 })
 
 describe('isUuid', () => {
-  it('accepts a UUID', () => {
+  it('UUIDを受け入れる', () => {
     expect(isUuid('123e4567-e89b-12d3-a456-426614174000')).toBe(true)
   })
 
-  it.each(['admin@example.com', '123e4567', 'not-a-uuid', ''])('rejects non-UUID %j', (bad) => {
+  it.each(['admin@example.com', '123e4567', 'not-a-uuid', ''])('UUID以外 %j を拒否する', (bad) => {
     expect(isUuid(bad)).toBe(false)
   })
 })
 
 describe('deleteSeAdmin', () => {
-  it('logically deletes the user, invalidates sessions, and records a SE_ADMIN_DELETE audit log', async () => {
+  it('ユーザーを論理削除し、セッションを無効化し、SE_ADMIN_DELETE監査ログを記録する', async () => {
     h.state.selectResult = [{ seAdminUserId: 'u1', email: 'target@example.com' }]
     h.state.deleteReturning = [{ sessionId: 's1' }, { sessionId: 's2' }]
 
@@ -202,7 +202,7 @@ describe('deleteSeAdmin', () => {
     })
   })
 
-  it('looks up by email when the identifier is not a UUID (and trims it)', async () => {
+  it('識別子がUUIDでない場合はメールで検索する（前後の空白はトリムする）', async () => {
     h.state.selectResult = [{ seAdminUserId: 'u2', email: 'by-mail@example.com' }]
 
     const deleted = await deleteSeAdmin('  by-mail@example.com  ')
@@ -211,7 +211,7 @@ describe('deleteSeAdmin', () => {
     expect(h.state.updateTables).toEqual([seAdminUsers])
   })
 
-  it('accepts a UUID identifier', async () => {
+  it('UUID識別子を受け入れる', async () => {
     h.state.selectResult = [
       { seAdminUserId: '123e4567-e89b-12d3-a456-426614174000', email: 'by-id@example.com' },
     ]
@@ -221,14 +221,14 @@ describe('deleteSeAdmin', () => {
     expect(deleted.email).toBe('by-id@example.com')
   })
 
-  it('throws and does not mutate when the identifier is empty', async () => {
+  it('識別子が空の場合はエラーを投げ、何も変更しない', async () => {
     await expect(deleteSeAdmin('   ')).rejects.toBeInstanceOf(SeAdminDeleteError)
     expect(h.state.updateTables).toHaveLength(0)
     expect(h.state.deleteTables).toHaveLength(0)
     expect(h.state.insertTables).toHaveLength(0)
   })
 
-  it('throws and does not mutate when the target is not found', async () => {
+  it('対象が見つからない場合はエラーを投げ、何も変更しない', async () => {
     h.state.selectResult = []
 
     await expect(deleteSeAdmin('missing@example.com')).rejects.toBeInstanceOf(SeAdminDeleteError)

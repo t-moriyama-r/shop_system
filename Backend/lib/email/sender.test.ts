@@ -40,7 +40,7 @@ afterEach(() => {
 })
 
 describe('ConsoleEmailSender', () => {
-  it('always succeeds and logs the message', async () => {
+  it('常に成功し、メッセージをログ出力する', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
     const result = await new ConsoleEmailSender().send({
       to: 'a@example.com',
@@ -54,7 +54,7 @@ describe('ConsoleEmailSender', () => {
 })
 
 describe('SesEmailSender', () => {
-  it('fails without throwing when EMAIL_FROM_ADDRESS is not configured', async () => {
+  it('EMAIL_FROM_ADDRESS が未設定の場合、例外を投げずに失敗を返す', async () => {
     delete process.env.EMAIL_FROM_ADDRESS
     const result = await new SesEmailSender().send({
       to: 'a@example.com',
@@ -66,7 +66,7 @@ describe('SesEmailSender', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
-  it('sends via the SES client when configured', async () => {
+  it('設定済みの場合はSESクライアント経由で送信する', async () => {
     process.env.EMAIL_FROM_ADDRESS = 'noreply@example.com'
     const result = await new SesEmailSender().send({
       to: 'a@example.com',
@@ -77,7 +77,7 @@ describe('SesEmailSender', () => {
     expect(send).toHaveBeenCalledTimes(1)
   })
 
-  it('returns a failure result when the SES client throws', async () => {
+  it('SESクライアントが例外を投げた場合は失敗結果を返す', async () => {
     process.env.EMAIL_FROM_ADDRESS = 'noreply@example.com'
     send.mockRejectedValue(new Error('SES timeout'))
     const result = await new SesEmailSender().send({
@@ -90,17 +90,17 @@ describe('SesEmailSender', () => {
 })
 
 describe('getEmailSender', () => {
-  it('returns a ConsoleEmailSender by default', () => {
+  it('デフォルトではConsoleEmailSenderを返す', () => {
     delete process.env.EMAIL_PROVIDER
     expect(getEmailSender()).toBeInstanceOf(ConsoleEmailSender)
   })
 
-  it('returns a SesEmailSender when EMAIL_PROVIDER=ses', () => {
+  it('EMAIL_PROVIDER=sesの場合はSesEmailSenderを返す', () => {
     process.env.EMAIL_PROVIDER = 'ses'
     expect(getEmailSender()).toBeInstanceOf(SesEmailSender)
   })
 
-  it('caches the instance across calls', () => {
+  it('呼び出しをまたいでインスタンスをキャッシュする', () => {
     delete process.env.EMAIL_PROVIDER
     expect(getEmailSender()).toBe(getEmailSender())
   })
