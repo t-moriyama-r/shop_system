@@ -31,8 +31,8 @@ const h = vi.hoisted(() => {
   return { state, makeChain }
 })
 
-vi.mock('./client', () => ({
-  db: {
+vi.mock('./client', () => {
+  const db: Record<string, unknown> = {
     select: () => h.makeChain(() => h.state.selectResult),
     insert: (table: unknown) => {
       h.state.insertTables.push(table)
@@ -46,12 +46,22 @@ vi.mock('./client', () => ({
       h.state.deleteTables.push(table)
       return h.makeChain(() => h.state.deleteReturning)
     },
-  },
-}))
+  }
+  // トランザクションは同じモックを tx として渡す（ロールバックは throw の伝播で表現される）
+  db.transaction = (fn: (tx: unknown) => Promise<unknown>) => fn(db)
+  return { db }
+})
 
-const { createSeAdmin, deleteSeAdmin, SeAdminCreateError, SeAdminDeleteError, isValidEmail, isUuid } =
-  await import('./se-admin')
-const { seAdminUsers, auditLogs, sessions } = await import('./schema')
+const {
+  createSeAdmin,
+  deleteSeAdmin,
+  SeAdminCreateError,
+  SeAdminDeleteError,
+  SeAdminNotificationError,
+  isValidEmail,
+  isUuid,
+} = await import('./se-admin')
+const { seAdminUsers, seAdminEmailNotificationLogs, auditLogs, sessions } = await import('./schema')
 
 beforeEach(() => {
   h.state.selectResult = []
@@ -78,45 +88,78 @@ describe('isValidEmail', () => {
 })
 
 describe('createSeAdmin', () => {
-  it('パスワードがNULLのユーザーを作成し、SE_ADMIN_CREATE監査ログを記録する', async () => {
+  const baseInput = {
+    email: 'new@example.com',
+    passwordHash: 'hashed-initial',
+    sendNotification: vi.fn().mockResolvedValue(undefined),
+  }
+
+  it('初期パスワードのハッシュ付きでユーザーを作成し、通知ログとSE_ADMIN_CREATE監査ログを記録する', async () => {
     h.state.selectResult = []
     h.state.insertReturning = [{ seAdminUserId: 'u1', email: 'new@example.com' }]
+    const sendNotification = vi.fn().mockResolvedValue(undefined)
 
-    const created = await createSeAdmin('new@example.com')
+    const created = await createSeAdmin({ ...baseInput, sendNotification })
 
     expect(created).toEqual({ seAdminUserId: 'u1', email: 'new@example.com' })
-    // password は指定しない（= NULL / パスワード未設定）
-    expect(h.state.insertValues[0]).toEqual({ email: 'new@example.com' })
-    expect(Object.keys(h.state.insertValues[0] as object)).not.toContain('password')
-    // se_admin_users と audit_logs の 2 回 insert される
-    expect(h.state.insertTables).toEqual([seAdminUsers, auditLogs])
+    // 初期パスワードのハッシュと変更強制フラグ付きで作成される
+    expect(h.state.insertValues[0]).toEqual({
+      email: 'new@example.com',
+      password: 'hashed-initial',
+      mustChangePassword: true,
+    })
+    // se_admin_users・通知ログ・audit_logs の 3 回 insert される
+    expect(h.state.insertTables).toEqual([seAdminUsers, seAdminEmailNotificationLogs, auditLogs])
     expect(h.state.insertValues[1]).toMatchObject({
+      seAdminUserId: 'u1',
+      toEmail: 'new@example.com',
+      notificationType: 'SE_ADMIN_ACCOUNT_ISSUED',
+      sendStatus: 'SUCCESS',
+    })
+    expect(h.state.insertValues[2]).toMatchObject({
       operatorType: 'cli',
       actionType: 'SE_ADMIN_CREATE',
       targetType: 'se_admin_user',
       targetId: 'u1',
       result: 'SUCCESS',
     })
+    expect(sendNotification).toHaveBeenCalledWith({ seAdminUserId: 'u1', email: 'new@example.com' })
   })
 
   it('保存前に前後の空白をトリムする', async () => {
     h.state.insertReturning = [{ seAdminUserId: 'u2', email: 'trim@example.com' }]
 
-    await createSeAdmin('  trim@example.com  ')
+    await createSeAdmin({ ...baseInput, email: '  trim@example.com  ' })
 
-    expect(h.state.insertValues[0]).toEqual({ email: 'trim@example.com' })
+    expect(h.state.insertValues[0]).toMatchObject({ email: 'trim@example.com' })
   })
 
-  it('メール形式が不正な場合はエラーを投げ、挿入しない', async () => {
-    await expect(createSeAdmin('not-an-email')).rejects.toBeInstanceOf(SeAdminCreateError)
+  it('メール形式が不正な場合はエラーを投げ、挿入も通知もしない', async () => {
+    const sendNotification = vi.fn()
+    await expect(
+      createSeAdmin({ ...baseInput, email: 'not-an-email', sendNotification }),
+    ).rejects.toBeInstanceOf(SeAdminCreateError)
     expect(h.state.insertTables).toHaveLength(0)
+    expect(sendNotification).not.toHaveBeenCalled()
   })
 
   it('メールが既に存在する場合はエラーを投げ、挿入しない', async () => {
     h.state.selectResult = [{ seAdminUserId: 'existing' }]
 
-    await expect(createSeAdmin('dup@example.com')).rejects.toBeInstanceOf(SeAdminCreateError)
+    await expect(createSeAdmin({ ...baseInput, email: 'dup@example.com' })).rejects.toBeInstanceOf(
+      SeAdminCreateError,
+    )
     expect(h.state.insertTables).toHaveLength(0)
+  })
+
+  it('通知メールの送信に失敗した場合はSeAdminNotificationErrorを投げる（トランザクションはロールバック）', async () => {
+    h.state.insertReturning = [{ seAdminUserId: 'u1', email: 'new@example.com' }]
+    const sendNotification = vi.fn().mockRejectedValue(new Error('SES unavailable'))
+
+    // トランザクション内で throw されるため、実 DB では全 INSERT がロールバックされる
+    await expect(createSeAdmin({ ...baseInput, sendNotification })).rejects.toBeInstanceOf(
+      SeAdminNotificationError,
+    )
   })
 })
 

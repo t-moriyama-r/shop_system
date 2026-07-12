@@ -8,6 +8,7 @@ export const sessionKeys = {
 export interface SessionUser {
   seAdminUserId: string
   email: string
+  mustChangePassword: boolean
 }
 
 export async function fetchCurrentUser(): Promise<SessionUser | null> {

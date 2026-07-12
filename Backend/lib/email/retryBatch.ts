@@ -2,19 +2,10 @@
 // email_notification_logs のうち送信失敗（FAILURE）かつ再試行回数上限未満、
 // バックオフ経過済みのレコードを検出し、一時パスワードを再発行した上で再送する。
 
-import bcrypt from 'bcrypt'
-import crypto from 'node:crypto'
 import { findEmailNotificationRetryCandidates, markEmailNotificationForRetry } from 'db/shop-accounts'
 import { recordAuditLog } from '../audit-log'
+import { generateInitialPassword, hashPassword } from '../password'
 import { sendShopAccountIssuedNotification } from './notify'
-
-const BCRYPT_SALT_ROUNDS = 10
-
-// 一時パスワードは平文を保持しない設計のため、再送のたびに新しいものを発行する
-// （手動再送信 API と同じ方式。設計 BP-003/BP-005 備考）。
-function generateInitialPassword(): string {
-  return crypto.randomBytes(18).toString('base64url')
-}
 
 /**
  * 送信失敗レコードを検出し、再送信をトリガーする。
@@ -24,8 +15,10 @@ export async function retryFailedEmailNotifications(now: Date = new Date()): Pro
   const candidates = await findEmailNotificationRetryCandidates(now)
 
   for (const candidate of candidates) {
+    // 一時パスワードは平文を保持しない設計のため、再送のたびに新しいものを発行する
+    // （手動再送信 API と同じ方式。設計 BP-003/BP-005 備考）。
     const temporaryPassword = generateInitialPassword()
-    const initialPasswordHash = await bcrypt.hash(temporaryPassword, BCRYPT_SALT_ROUNDS)
+    const initialPasswordHash = await hashPassword(temporaryPassword)
 
     await markEmailNotificationForRetry({
       emailNotificationLogId: candidate.emailNotificationLogId,

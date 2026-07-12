@@ -20,7 +20,7 @@ vi.mock('db/sessions', () => ({}))
 
 vi.mock('./middleware/auth', () => ({
   authMiddleware: async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set('user', { seAdminUserId: 'operator-1', email: 'operator@example.com', isPasswordSet: true })
+    c.set('user', { seAdminUserId: 'operator-1', email: 'operator@example.com', mustChangePassword: false })
     await next()
   },
 }))

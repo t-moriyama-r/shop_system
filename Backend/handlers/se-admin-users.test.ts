@@ -19,7 +19,7 @@ const { listSeAdminUsersHandler, deleteSeAdminUserHandler, setSeAdminLockHandler
   './se-admin-users'
 )
 
-const operator = { seAdminUserId: 'operator-1', email: 'op@example.com', isPasswordSet: true }
+const operator = { seAdminUserId: 'operator-1', email: 'op@example.com', mustChangePassword: false }
 const meta = { ipAddress: null, userAgent: null }
 
 beforeEach(() => {

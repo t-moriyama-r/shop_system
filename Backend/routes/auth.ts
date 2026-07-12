@@ -35,7 +35,7 @@ auth.get('/session', authMiddleware, (c) => {
   return c.json({
     seAdminUserId: user.seAdminUserId,
     email: user.email,
-    isPasswordSet: user.isPasswordSet,
+    mustChangePassword: user.mustChangePassword,
   })
 })
 

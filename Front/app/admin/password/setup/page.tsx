@@ -30,7 +30,7 @@ export default function PasswordSetupPage() {
           return
         }
         const data = await res.json()
-        if (data.isPasswordSet) {
+        if (!data.mustChangePassword) {
           router.replace('/admin/dashboard')
         }
       } catch {
@@ -99,10 +99,10 @@ export default function PasswordSetupPage() {
         <div className="w-full max-w-md">
           <div className="rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
             <h2 className="mb-2 text-center text-xl font-bold text-gray-800">
-              初回パスワード設定
+              初期パスワードの変更
             </h2>
             <p className="mb-6 text-center text-sm text-gray-600">
-              セキュリティのため、パスワードを設定してください。
+              メールで送付された初期パスワードから、新しいパスワードへ変更してください。
             </p>
 
             {error && (

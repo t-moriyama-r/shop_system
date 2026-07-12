@@ -119,8 +119,8 @@ describe('login state updates', () => {
     expect(h.state.updateSets[0]).toMatchObject({ failedLoginCount: 5, isLocked: true })
   })
 
-  it('setSeAdminPasswordはハッシュ化されたパスワードを保存する', async () => {
+  it('setSeAdminPasswordはハッシュ化されたパスワードを保存し、mustChangePasswordを下ろす', async () => {
     await setSeAdminPassword('u1', 'hashed')
-    expect(h.state.updateSets[0]).toMatchObject({ password: 'hashed' })
+    expect(h.state.updateSets[0]).toMatchObject({ password: 'hashed', mustChangePassword: false })
   })
 })

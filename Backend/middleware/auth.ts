@@ -5,7 +5,8 @@ import { authenticateSession } from '../handlers/auth'
 export interface AuthUser {
   seAdminUserId: string
   email: string
-  isPasswordSet: boolean
+  /** true = メール送付された初期パスワードのまま（パスワード変更画面以外の利用は不可） */
+  mustChangePassword: boolean
 }
 
 export const authMiddleware = createMiddleware<{ Variables: { user: AuthUser } }>(

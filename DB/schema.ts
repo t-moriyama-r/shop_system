@@ -15,7 +15,11 @@ export const menuItems = pgTable('menu_items', {
 export const seAdminUsers = pgTable('se_admin_users', {
   seAdminUserId: uuid('se_admin_user_id').primaryKey().defaultRandom(),
   email: varchar('email', { length: 255 }).notNull().unique(),
+  // 初期パスワード（ランダム生成）のハッシュが作成時に必ず入る。NULL は旧方式（パスワード未設定運用）の
+  // 名残で、該当アカウントはログイン不可。CLI での再作成が復旧手段。
   password: varchar('password', { length: 255 }),
+  // true = メール送付した初期パスワードのまま（初回ログイン後にパスワード変更を強制する）
+  mustChangePassword: boolean('must_change_password').notNull().default(true),
   isLocked: boolean('is_locked').notNull().default(false),
   failedLoginCount: smallint('failed_login_count').notNull().default(0),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
@@ -38,6 +42,9 @@ export const shopAccounts = pgTable('shop_accounts', {
   contactName: varchar('contact_name', { length: 255 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   initialPasswordHash: varchar('initial_password_hash', { length: 255 }),
+  // true = 初期パスワード（initial_password_hash）のまま。ショップ側ログイン実装時は、このフラグが
+  // true の間だけ initial_password_hash で照合し、パスワード変更完了時に false へ更新する想定。
+  mustChangePassword: boolean('must_change_password').notNull().default(true),
   accountStatus: varchar('account_status', { length: 50 }).notNull().default('pending'),
   issuedBySeAdminUserId: uuid('issued_by_se_admin_user_id').notNull().references(() => seAdminUsers.seAdminUserId),
   notificationSentAt: timestamp('notification_sent_at', { withTimezone: true }),
@@ -64,6 +71,22 @@ export const auditLogs = pgTable('audit_logs', {
 export const emailNotificationLogs = pgTable('email_notification_logs', {
   emailNotificationLogId: uuid('email_notification_log_id').primaryKey().defaultRandom(),
   shopAccountId: uuid('shop_account_id').notNull().references(() => shopAccounts.shopAccountId),
+  toEmail: varchar('to_email', { length: 255 }).notNull(),
+  notificationType: varchar('notification_type', { length: 100 }).notNull(),
+  sendStatus: varchar('send_status', { length: 50 }).notNull().default('PENDING'),
+  sentAt: timestamp('sent_at', { withTimezone: true }),
+  errorMessage: text('error_message'),
+  retryCount: smallint('retry_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+// SE管理者宛メール通知の送信ログ。アカウント作成（初期パスワード送付）はメール送信失敗時に
+// トランザクションごとロールバックするため、このテーブルには送信に成功した通知のみが残る
+// （失敗の証跡は audit_logs 側に記録される）。
+export const seAdminEmailNotificationLogs = pgTable('se_admin_email_notification_logs', {
+  seAdminEmailNotificationLogId: uuid('se_admin_email_notification_log_id').primaryKey().defaultRandom(),
+  seAdminUserId: uuid('se_admin_user_id').notNull().references(() => seAdminUsers.seAdminUserId),
   toEmail: varchar('to_email', { length: 255 }).notNull(),
   notificationType: varchar('notification_type', { length: 100 }).notNull(),
   sendStatus: varchar('send_status', { length: 50 }).notNull().default('PENDING'),

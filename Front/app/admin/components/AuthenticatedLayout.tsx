@@ -10,7 +10,7 @@ import { LoadingIndicator } from './LoadingIndicator'
 interface SessionUser {
   seAdminUserId: string
   email: string
-  isPasswordSet: boolean
+  mustChangePassword: boolean
 }
 
 export function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -27,7 +27,7 @@ export function AuthenticatedLayout({ children }: { children: React.ReactNode })
           return
         }
         const data: SessionUser = await res.json()
-        if (!data.isPasswordSet) {
+        if (data.mustChangePassword) {
           router.replace('/admin/password/setup')
           return
         }

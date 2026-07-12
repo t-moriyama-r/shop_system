@@ -29,6 +29,7 @@ const publicColumns = {
   shopName: shopAccounts.shopName,
   contactName: shopAccounts.contactName,
   email: shopAccounts.email,
+  mustChangePassword: shopAccounts.mustChangePassword,
   accountStatus: shopAccounts.accountStatus,
   issuedBySeAdminUserId: shopAccounts.issuedBySeAdminUserId,
   notificationSentAt: shopAccounts.notificationSentAt,
@@ -43,6 +44,7 @@ export interface ShopAccountListItem {
   shopName: string
   contactName: string
   email: string
+  mustChangePassword: boolean
   accountStatus: string
   issuedBySeAdminUserId: string
   notificationSentAt: Date | null
@@ -161,6 +163,7 @@ export async function createShopAccount(
         contactName: input.contactName,
         email: input.email,
         initialPasswordHash: input.initialPasswordHash,
+        mustChangePassword: true,
         accountStatus: 'pending',
         issuedBySeAdminUserId: input.issuedBySeAdminUserId,
       })
@@ -258,9 +261,14 @@ export async function createResendEmailNotificationLog(input: {
   initialPasswordHash: string
 }): Promise<EmailNotificationLog> {
   return db.transaction(async (tx) => {
+    // 再送 = 初期パスワードの再発行なので、変更強制フラグも立て直す。
     await tx
       .update(shopAccounts)
-      .set({ initialPasswordHash: input.initialPasswordHash, updatedAt: new Date() })
+      .set({
+        initialPasswordHash: input.initialPasswordHash,
+        mustChangePassword: true,
+        updatedAt: new Date(),
+      })
       .where(eq(shopAccounts.shopAccountId, input.shopAccountId))
 
     const [log] = await tx
@@ -420,9 +428,14 @@ export async function markEmailNotificationForRetry(
   const now = input.now ?? new Date()
 
   await db.transaction(async (tx) => {
+    // 再送 = 初期パスワードの再発行なので、変更強制フラグも立て直す。
     await tx
       .update(shopAccounts)
-      .set({ initialPasswordHash: input.initialPasswordHash, updatedAt: now })
+      .set({
+        initialPasswordHash: input.initialPasswordHash,
+        mustChangePassword: true,
+        updatedAt: now,
+      })
       .where(eq(shopAccounts.shopAccountId, input.shopAccountId))
 
     await tx
